@@ -4,3 +4,27 @@ __pycache__/
 out
 website/
 docs-minimind/
+
+# Local environments, caches, credentials, and generated model/runtime assets.
+.venv*/
+.pytest_cache/
+pytest-cache-files-*/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.gguf
+*.onnx
+*.dll
+*.so
+*.dylib
+*.exe
+*.obj
+*.pdb
+*.lib
+*.exp

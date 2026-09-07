@@ -1,0 +1,7 @@
+/build*/
+/artifacts/
+/validation/
+__pycache__/
+*.pyc
+*.obj
+*.bin

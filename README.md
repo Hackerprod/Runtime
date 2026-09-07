@@ -1,3 +1,7 @@
+# Runtime fork
+
+This fork adds a native C++ CPU runtime and reproducible comparison tooling to MiniMind. Start with the [native CPU runtime guide](native_cpu/README.md); benchmark evidence is summarized in [`native_cpu/benchmarks/t0-affinity-v1/`](native_cpu/benchmarks/t0-affinity-v1/).
+
 <div align="center">
 
 ![logo](./images/logo.png)

@@ -1,0 +1,245 @@
+{
+  "status": "completed",
+  "exact_all_turn_token_text_parity": true,
+  "configuration": {
+    "threads": 2,
+    "cpus": [
+      0,
+      6
+    ],
+    "row_weights": [
+      1332,
+      992
+    ]
+  },
+  "order": [
+    "baseline",
+    "candidate",
+    "candidate",
+    "baseline",
+    "baseline",
+    "candidate",
+    "candidate",
+    "baseline"
+  ],
+  "trials": [
+    {
+      "index": 1,
+      "backend": "baseline",
+      "file": "01-baseline.json",
+      "environment": {
+        "system_cpu_percent_before": 9.3,
+        "power": {
+          "ac_line": 1,
+          "battery_percent": 100,
+          "battery_flags": 1
+        }
+      },
+      "prefill_seconds": 18.0137501002755,
+      "decode_seconds": 8.693024499807507,
+      "inference_seconds": 26.70677460008301,
+      "decode_eval_steps": 733,
+      "decode_tokens_per_second": 84.32048017536717
+    },
+    {
+      "index": 2,
+      "backend": "candidate",
+      "file": "02-candidate.json",
+      "environment": {
+        "system_cpu_percent_before": 5.5,
+        "power": {
+          "ac_line": 1,
+          "battery_percent": 100,
+          "battery_flags": 1
+        }
+      },
+      "prefill_seconds": 16.85198219981976,
+      "decode_seconds": 8.2137217996642,
+      "inference_seconds": 25.065703999483958,
+      "decode_eval_steps": 733,
+      "decode_tokens_per_second": 89.24090903954979
+    },
+    {
+      "index": 3,
+      "backend": "candidate",
+      "file": "03-candidate.json",
+      "environment": {
+        "system_cpu_percent_before": 12.6,
+        "power": {
+          "ac_line": 1,
+          "battery_percent": 100,
+          "battery_flags": 1
+        }
+      },
+      "prefill_seconds": 17.195237499661744,
+      "decode_seconds": 8.390424800105393,
+      "inference_seconds": 25.585662299767137,
+      "decode_eval_steps": 733,
+      "decode_tokens_per_second": 87.36148853759975
+    },
+    {
+      "index": 4,
+      "backend": "baseline",
+      "file": "04-baseline.json",
+      "environment": {
+        "system_cpu_percent_before": 2.3,
+        "power": {
+          "ac_line": 1,
+          "battery_percent": 100,
+          "battery_flags": 1
+        }
+      },
+      "prefill_seconds": 17.716122600017115,
+      "decode_seconds": 8.607680099783465,
+      "inference_seconds": 26.32380269980058,
+      "decode_eval_steps": 733,
+      "decode_tokens_per_second": 85.15651040730933
+    },
+    {
+      "index": 5,
+      "backend": "baseline",
+      "file": "05-baseline.json",
+      "environment": {
+        "system_cpu_percent_before": 9.3,
+        "power": {
+          "ac_line": 1,
+          "battery_percent": 100,
+          "battery_flags": 1
+        }
+      },
+      "prefill_seconds": 18.03769679996185,
+      "decode_seconds": 8.644188599893823,
+      "inference_seconds": 26.681885399855673,
+      "decode_eval_steps": 733,
+      "decode_tokens_per_second": 84.79685415575078
+    },
+    {
+      "index": 6,
+      "backend": "candidate",
+      "file": "06-candidate.json",
+      "environment": {
+        "system_cpu_percent_before": 8.2,
+        "power": {
+          "ac_line": 1,
+          "battery_percent": 100,
+          "battery_flags": 1
+        }
+      },
+      "prefill_seconds": 16.958578300196677,
+      "decode_seconds": 8.446737400256097,
+      "inference_seconds": 25.405315700452775,
+      "decode_eval_steps": 733,
+      "decode_tokens_per_second": 86.77906809057141
+    },
+    {
+      "index": 7,
+      "backend": "candidate",
+      "file": "07-candidate.json",
+      "environment": {
+        "system_cpu_percent_before": 10.7,
+        "power": {
+          "ac_line": 1,
+          "battery_percent": 100,
+          "battery_flags": 1
+        }
+      },
+      "prefill_seconds": 16.878091799560934,
+      "decode_seconds": 8.315008400008082,
+      "inference_seconds": 25.193100199569017,
+      "decode_eval_steps": 733,
+      "decode_tokens_per_second": 88.15384960997604
+    },
+    {
+      "index": 8,
+      "backend": "baseline",
+      "file": "08-baseline.json",
+      "environment": {
+        "system_cpu_percent_before": 39.4,
+        "power": {
+          "ac_line": 1,
+          "battery_percent": 100,
+          "battery_flags": 1
+        }
+      },
+      "prefill_seconds": 18.05680559994653,
+      "decode_seconds": 8.675808899803087,
+      "inference_seconds": 26.732614499749616,
+      "decode_eval_steps": 733,
+      "decode_tokens_per_second": 84.48779917416539
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "prefill_seconds": {
+        "median": 18.025723450118676,
+        "min": 17.716122600017115,
+        "max": 18.05680559994653
+      },
+      "decode_seconds": {
+        "median": 8.659998749848455,
+        "min": 8.607680099783465,
+        "max": 8.693024499807507
+      },
+      "inference_seconds": {
+        "median": 26.69432999996934,
+        "min": 26.32380269980058,
+        "max": 26.732614499749616
+      },
+      "decode_tokens_per_second": {
+        "median": 84.64232666495809,
+        "min": 84.32048017536717,
+        "max": 85.15651040730933
+      }
+    },
+    "candidate": {
+      "prefill_seconds": {
+        "median": 16.918335049878806,
+        "min": 16.85198219981976,
+        "max": 17.195237499661744
+      },
+      "decode_seconds": {
+        "median": 8.352716600056738,
+        "min": 8.2137217996642,
+        "max": 8.446737400256097
+      },
+      "inference_seconds": {
+        "median": 25.299207950010896,
+        "min": 25.065703999483958,
+        "max": 25.585662299767137
+      },
+      "decode_tokens_per_second": {
+        "median": 87.7576690737879,
+        "min": 86.77906809057141,
+        "max": 89.24090903954979
+      }
+    }
+  },
+  "decode_speedup": 1.0368059637722549,
+  "inference_time_reduction": 0.05226286068839514,
+  "promotion_gate": {
+    "requires_exact_parity": true,
+    "minimum_decode_gain": 0.05,
+    "minimum_inference_time_reduction": 0.05,
+    "passed": false
+  },
+  "library_hashes": {
+    "baseline": "2f94db038e25b3979d338ef2056b9bde6d479f97751c6882644c0641140ad489",
+    "candidate": "4f9ed66fd43d0850f7d2ec17679df1b85754c665ba5c3393b1e71f7f7658c1bd"
+  },
+  "evidence_sha256": {
+    "01-baseline.json": "40dfbd15893d289790ed75567c4c739844f8220693d442fa0a5a2e8b6c05ce7e",
+    "02-candidate.json": "dbddb2bc21500e9e91d3a08b3acb325a3b5ccc34954d90e4591e26b6cb9997b4",
+    "03-candidate.json": "b44cac56bba7a682c0f875457c85a1939c363576464c22de92beb292009d31e4",
+    "04-baseline.json": "980b6137e755e96d4c65f81e1e7c0f5ac6896441681e55e4407b9a3e9187bc56",
+    "05-baseline.json": "eaf79d58ce86f76be7c2a75adee47e51b49383d6cc1b9c0eccad1062ee514229",
+    "06-candidate.json": "c2785186893dd677117a646c1e5c069b8f0aa571ec69f4cd35c1fdb06dbab195",
+    "07-candidate.json": "5b5ad6d9bebdd4cabf25a89ca37f4cdaf2bb847db2e9ff84a5c26c5baf0b12f8",
+    "08-baseline.json": "f2fe5c611aa2b9d7203d87775f545f3e036dfdd58cf657b76b6d5a4a1e49a0e7"
+  },
+  "limitations": [
+    "One laptop, one six-turn conversation; not a universal speed guarantee.",
+    "Four old project test processes were removed before every trial in this report; early pilots remain confounded.",
+    "No simultaneous benchmarks, builds, or test suites; desktop activity, power and temperature not controlled.",
+    "Buffered generation, full-history prefill per turn, unchanged FP32 model and sampling."
+  ]
+}

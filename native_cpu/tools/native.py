@@ -12,7 +12,7 @@ class _MmRuntimeStats(ctypes.Structure):
     _fields_ = [(name, ctypes.c_uint64) for name in (
         "lm_head_calls", "qkv_calls", "attention_kv_calls", "output_projection_calls",
         "ffn_calls", "vocab_head_calls", "remaining_ops_calls", "qkv_ns",
-        "attention_kv_ns", "attention_qk_ns", "output_projection_ns", "ffn_ns", "vocab_head_ns",
+        "attention_kv_ns", "output_projection_ns", "ffn_ns", "vocab_head_ns",
         "remaining_ops_ns")]
     _fields_ += [("participant_compute_ns", ctypes.c_uint64 * 64),
                  ("controller_wait_ns", ctypes.c_uint64),
@@ -119,6 +119,8 @@ class NativeRuntime:
         self._configure_profile = getattr(lib, "mm_configure_profile", None)
         self._reset_stats = getattr(lib, "mm_reset_stats", None)
         self._get_stats = getattr(lib, "mm_get_stats", None)
+        self._query_attention_qk_ns = getattr(lib, "mm_get_attention_qk_ns", None)
+        self._stats_abi_incompatible = self._get_stats is not None and self._configure_gqa_k_shared is not None and self._query_attention_qk_ns is None
         if self._configure_threads is not None:
             self._configure_threads.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
                                                 ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint32),
@@ -136,6 +138,8 @@ class NativeRuntime:
             self._reset_stats.argtypes = [ctypes.c_void_p]; self._reset_stats.restype = ctypes.c_int
         if self._get_stats is not None:
             self._get_stats.argtypes = [ctypes.c_void_p, ctypes.POINTER(_MmRuntimeStats)]; self._get_stats.restype = ctypes.c_int
+        if self._query_attention_qk_ns is not None:
+            self._query_attention_qk_ns.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64)]; self._query_attention_qk_ns.restype = ctypes.c_int
 
     def _configure(self, threads, cpus, row_weights):
         cpu_array = None if cpus is None else (ctypes.c_uint32 * len(cpus))(*cpus)
@@ -285,16 +289,42 @@ class NativeRuntime:
         if int(self._reset_stats(self._handle)) != 0: raise NativeError("mm_reset_stats failed")
 
     @property
+    def stats_abi_incompatible(self):
+        """Whether this DLL advertises CPU-R4 features with the old stats ABI."""
+        return bool(self._stats_abi_incompatible)
+
+    @property
     def stats(self):
         self._check()
         if self._get_stats is None: return None
+        if self._stats_abi_incompatible:
+            raise NativeError("native runtime exposes CPU-R4 shared-K symbols with an incompatible statistics ABI; rebuild the DLL")
         raw = _MmRuntimeStats()
         if int(self._get_stats(self._handle, ctypes.byref(raw))) != 0: raise NativeError("mm_get_stats failed")
         result = {}
         for name, _ in raw._fields_:
             value = getattr(raw, name)
             result[name] = [int(item) for item in value] if isinstance(value, ctypes.Array) else int(value)
+        if self._query_attention_qk_ns is None:
+            result["attention_qk_ns"] = None
+        else:
+            qk = ctypes.c_uint64()
+            if int(self._query_attention_qk_ns(self._handle, ctypes.byref(qk))) != 0:
+                raise NativeError("mm_get_attention_qk_ns failed")
+            result["attention_qk_ns"] = int(qk.value)
         return result
+
+    @property
+    def attention_qk_ns(self):
+        self._check()
+        if self._stats_abi_incompatible:
+            raise NativeError("native runtime exposes CPU-R4 shared-K symbols with an incompatible statistics ABI; rebuild the DLL")
+        if self._query_attention_qk_ns is None:
+            return None
+        qk = ctypes.c_uint64()
+        if int(self._query_attention_qk_ns(self._handle, ctypes.byref(qk))) != 0:
+            raise NativeError("mm_get_attention_qk_ns failed")
+        return int(qk.value)
 
     @property
     def lm_head_calls(self):

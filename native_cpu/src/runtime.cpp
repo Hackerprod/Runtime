@@ -304,6 +304,7 @@ static std::unordered_map<std::string, Tensor> load_tensors(const std::vector<ui
 struct Runtime {
     enum class ProfileOp : std::uint32_t { Qkv, Attention, Output, Ffn, Vocab, Remaining };
     MmRuntimeStats stats{};
+    std::uint64_t attention_qk_ns = 0;
     bool profile_enabled = false;
     bool selective_logits = false;
     bool v_blocked_attention = false;
@@ -556,7 +557,7 @@ struct Runtime {
                         max_score1 = std::max(max_score1, score1);
                     }
                     if (profile_enabled) {
-                        stats.attention_qk_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qk_started).count());
+                        attention_qk_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qk_started).count());
                     }
                     finish_attention_head(h, kvh, max_score0);
                     finish_attention_head(h + 1, kvh, max_score1);
@@ -576,7 +577,7 @@ struct Runtime {
                         max_score = std::max(max_score, score);
                     }
                     if (profile_enabled) {
-                        stats.attention_qk_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qk_started).count());
+                        attention_qk_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qk_started).count());
                     }
                     finish_attention_head(h, kvh, max_score);
                 }
@@ -707,6 +708,7 @@ MM_RUNTIME_API int mm_reset_stats(void* runtime) {
     try {
         Runtime* model = checked_runtime(runtime);
         model->stats = {};
+        model->attention_qk_ns = 0;
         model->parallel.reset_profile_stats();
         return 0;
     } catch (...) { return -1; }
@@ -754,6 +756,15 @@ MM_RUNTIME_API int mm_configure_v_blocked_attention(void* runtime, int enabled) 
 
 MM_RUNTIME_API int mm_v_blocked_attention(void* runtime) {
     try { return checked_runtime(runtime)->v_blocked_attention ? 1 : 0; } catch (...) { return 0; }
+}
+
+MM_RUNTIME_API int mm_get_attention_qk_ns(void* runtime, uint64_t* out_ns) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (out_ns == nullptr) return -1;
+        *out_ns = model->attention_qk_ns;
+        return 0;
+    } catch (...) { return -1; }
 }
 
 MM_RUNTIME_API int mm_configure_ffn_row4(void* runtime, int enabled) {

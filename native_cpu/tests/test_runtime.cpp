@@ -558,7 +558,9 @@ void test_diagnostic_profile_contract() {
             assert(stats.qkv_calls == 12 && stats.attention_kv_calls == 4);
             assert(stats.output_projection_calls == 4 && stats.ffn_calls == 12);
             assert(stats.vocab_head_calls == 2);
-            assert(stats.qkv_ns > 0 && stats.attention_kv_ns > 0 && stats.attention_qk_ns > 0);
+            assert(stats.qkv_ns > 0 && stats.attention_kv_ns > 0);
+            uint64_t qk_ns = 0;
+            assert(mm_get_attention_qk_ns(candidate.value, &qk_ns) == 0 && qk_ns > 0);
             assert(stats.remaining_ops_ns > 0 && stats.vocab_head_ns > 0);
             for (uint32_t i = 0; i < 64; ++i) {
                 assert(stats.participant_compute_calls[i] == (i < threads ? 30u : 0u));
@@ -578,7 +580,9 @@ void test_diagnostic_profile_contract() {
             assert_exact(evaluate(candidate.value, {1, 4}), expected);
             assert(mm_get_stats(candidate.value, &stats) == 0);
             assert(stats.lm_head_calls == 2);
-            assert(stats.qkv_ns == 0 && stats.attention_qk_ns == 0 && stats.remaining_ops_ns == 0);
+            assert(stats.qkv_ns == 0 && stats.remaining_ops_ns == 0);
+            qk_ns = 123;
+            assert(mm_get_attention_qk_ns(candidate.value, &qk_ns) == 0 && qk_ns == 0);
             assert(stats.controller_wait_ns == 0);
             for (uint32_t i = 0; i < 64; ++i) assert(stats.participant_compute_ns[i] == 0);
             // Restore the reference prefix for the next participant count.
@@ -589,6 +593,47 @@ void test_diagnostic_profile_contract() {
     assert(mm_configure_profile(nullptr, 1) == -1);
     assert(mm_reset_stats(nullptr) == -1);
     assert(mm_get_stats(nullptr, nullptr) == -1);
+    std::filesystem::remove(path);
+}
+
+void test_stats_abi_and_qk_counter_contract() {
+    struct LegacyMmRuntimeStats {
+        uint64_t lm_head_calls;
+        uint64_t qkv_calls, attention_kv_calls, output_projection_calls;
+        uint64_t ffn_calls, vocab_head_calls, remaining_ops_calls;
+        uint64_t qkv_ns, attention_kv_ns, output_projection_ns;
+        uint64_t ffn_ns, vocab_head_ns, remaining_ops_ns;
+        uint64_t participant_compute_ns[64], controller_wait_ns;
+        uint64_t participant_compute_calls[64];
+    };
+    static_assert(sizeof(MmRuntimeStats) == 1136);
+    static_assert(sizeof(LegacyMmRuntimeStats) == sizeof(MmRuntimeStats));
+    static_assert(offsetof(LegacyMmRuntimeStats, qkv_ns) == offsetof(MmRuntimeStats, qkv_ns));
+    static_assert(offsetof(LegacyMmRuntimeStats, attention_kv_ns) == offsetof(MmRuntimeStats, attention_kv_ns));
+    static_assert(offsetof(LegacyMmRuntimeStats, output_projection_ns) == offsetof(MmRuntimeStats, output_projection_ns));
+    static_assert(offsetof(LegacyMmRuntimeStats, participant_compute_calls) == offsetof(MmRuntimeStats, participant_compute_calls));
+    struct GuardedStats {
+        LegacyMmRuntimeStats stats{};
+        uint64_t canary[2] = {0x1122334455667788ull, 0x8877665544332211ull};
+    } guarded;
+
+    const auto path = write_file(threading_fixture(false), ".stats-abi");
+    ScopedRuntime runtime(path, 0);
+    assert(mm_configure_profile(runtime.value, 1) == 0);
+    (void)evaluate(runtime.value, {1, 4}); // establish non-zero diagnostic counters before the ABI probe
+    // The probe uses the pre-CPU-R4 layout as the client buffer. A corrected DLL
+    // must not write its new Q·K counter past this legacy allocation.
+    guarded.canary[0] = 0x1122334455667788ull;
+    guarded.canary[1] = 0x8877665544332211ull;
+    assert(mm_get_stats(runtime.value, reinterpret_cast<MmRuntimeStats*>(&guarded.stats)) == 0);
+    assert(guarded.canary[0] == 0x1122334455667788ull && guarded.canary[1] == 0x8877665544332211ull);
+    assert(guarded.stats.attention_kv_ns > 0);
+    uint64_t qk_ns = 0;
+    assert(mm_get_attention_qk_ns(runtime.value, &qk_ns) == 0 && qk_ns > 0);
+    assert(mm_get_attention_qk_ns(runtime.value, nullptr) == -1);
+    assert(mm_get_attention_qk_ns(nullptr, &qk_ns) == -1);
+    assert(mm_reset_stats(runtime.value) == 0);
+    assert(mm_get_attention_qk_ns(runtime.value, &qk_ns) == 0 && qk_ns == 0);
     std::filesystem::remove(path);
 }
 
@@ -845,6 +890,7 @@ void test_truncate_contract() {
 
 int main() {
     test_diagnostic_profile_contract();
+    test_stats_abi_and_qk_counter_contract();
     test_selective_logits_contract();
     test_v_blocked_attention_contract();
     test_gqa_k_shared_contract();

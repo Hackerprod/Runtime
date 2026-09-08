@@ -13,7 +13,7 @@ from native_cpu.tools.chat import (
     _template_environment,
     sample_logits,
 )
-from native_cpu.tools.native import NativeRuntime
+from native_cpu.tools.native import NativeRuntime, NativeError
 
 class FakeTokenizer:
     eos_token_id = 2
@@ -36,6 +36,17 @@ class FakeRuntime:
     def backend(self): return 'fake'
 
 class ChatTests(unittest.TestCase):
+    def test_incompatible_stats_abi_is_not_swallowed_by_diagnostics_snapshot(self):
+        class IncompatibleRuntime(FakeRuntime):
+            stats_abi_incompatible = True
+            @property
+            def stats(self):
+                raise AssertionError("mm_get_stats must not be called")
+
+        session = ChatSession(IncompatibleRuntime(), FakeTokenizer(), context_limit=12, max_new_tokens=1)
+        with self.assertRaisesRegex(NativeError, "incompatible statistics ABI"):
+            session.turn("hello")
+
     def test_profile_phase_deltas_subtract_each_participant(self):
         before = {"lm_head_calls": 3, "participant_compute_ns": [100, 90, 0]}
         after = {"lm_head_calls": 5, "participant_compute_ns": [140, 120, 0]}

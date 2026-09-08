@@ -1,0 +1,5 @@
+corrected-client/corrected-DLL: PASS; old_stats_layout=1136; qk_read_reset=PASS; qk_ns= 52400
+corrected-client/corrected-DLL: qk_reset=PASS
+corrected-client/old-compatible-DLL: PASS; qk=unavailable (not zero); parity_exact= True max_abs= 0.0
+corrected-client/published-CPU-R4-DLL: PASS; explicit_rejection= native runtime exposes CPU-R4 shared-K symbols with an incompatible statistics ABI; rebuild the DLL
+compatibility matrix: PASS

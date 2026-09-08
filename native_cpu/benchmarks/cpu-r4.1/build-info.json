@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "build_type": "Release",
+  "cmake": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+  "generator": "Visual Studio 18 2026",
+  "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /EHsc /fp:precise /std:c++20",
+  "compiler": {
+    "id": "MSVC",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+    "version": "19.50.35727.0"
+  },
+  "library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\minimind_cpu.dll",
+  "library_sha256": "01207ad5b34f80c962961034a8855e0ef986046ce60cafd60042e685cc15b3e1",
+  "native_threads": 1,
+  "native_sources_sha256": {
+    "native_cpu/CMakeLists.txt": "5f460690b76922b7bb5785c12fee9bd1715d8a87508968aa1868f9c34e885166",
+    "native_cpu/include/mm_runtime.h": "f8f255061c3f23cc4dd779c2a8b274233425a6f76be6b950b6a1e9d3af736481",
+    "native_cpu/include/mm_kernels.h": "ebca8958d35e5209ac005a22c5a2b10007ac951c0a64c903948452cccbbb258b",
+    "native_cpu/include/mm_parallel.h": "f57cd94f9add85106a093653fd9eba2f4599ee66687127cf464c7eccb75a15ef",
+    "native_cpu/src/kernels.cpp": "d086d5f889a75fd5ea41fa687d18f9e3b3e403957ea1f65f845c5306c815a901",
+    "native_cpu/src/parallel.cpp": "d4220c8459e061d4b12ea82518b97906d973924f1a631acba744c5971788841a",
+    "native_cpu/src/runtime.cpp": "01e0d63592f7f672043de9693d47fdfe1542ba92a0679ea23da7d3d86e997f1b",
+    "native_cpu/tests/test_kernels.cpp": "e023881daffed4242eb15b4d977a3bce95a1663be7e589cbf5bc1db37571c094",
+    "native_cpu/tests/test_runtime.cpp": "7cb76586083589ca4809deedd237156ebcb6b4b21cc4d249fa651dfd0313fa02"
+  },
+  "source_commit": "762611d2a75343401fa308b72753772cda84d03a",
+  "stats_abi": {
+    "legacy_size_bytes": 1136,
+    "qk_counter_symbol": "mm_get_attention_qk_ns",
+    "qk_counter_optional": true,
+    "incompatible_detection": "mm_get_stats + mm_configure_gqa_k_shared without mm_get_attention_qk_ns"
+  },
+  "built_at_utc": "2026-09-08T11:41:35.892788Z"
+}

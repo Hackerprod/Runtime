@@ -193,6 +193,8 @@ class ChatSession:
         if after is not None and before is not None and after != before + len(values): raise RuntimeError("runtime position did not advance by evaluated token count")
         self.cached_token_ids.extend(values); self._cache_identity = self._identity(); return logits
     def _stats_snapshot(self):
+        if bool(getattr(self.runtime, "stats_abi_incompatible", False)):
+            raise NativeError("native runtime exposes CPU-R4 shared-K symbols with an incompatible statistics ABI; rebuild the DLL")
         try:
             value = getattr(self.runtime, "stats", None)
             if callable(value): value = value()

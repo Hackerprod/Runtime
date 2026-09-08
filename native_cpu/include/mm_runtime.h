@@ -33,7 +33,7 @@ typedef struct MmRuntimeStats {
     uint64_t lm_head_calls;
     uint64_t qkv_calls, attention_kv_calls, output_projection_calls;
     uint64_t ffn_calls, vocab_head_calls, remaining_ops_calls;
-    uint64_t qkv_ns, attention_kv_ns, attention_qk_ns, output_projection_ns;
+    uint64_t qkv_ns, attention_kv_ns, output_projection_ns;
     uint64_t ffn_ns, vocab_head_ns, remaining_ops_ns;
     uint64_t participant_compute_ns[64], controller_wait_ns;
     uint64_t participant_compute_calls[64];
@@ -41,6 +41,9 @@ typedef struct MmRuntimeStats {
 MM_RUNTIME_API int mm_configure_profile(void* runtime, int enabled);
 MM_RUNTIME_API int mm_reset_stats(void* runtime);
 MM_RUNTIME_API int mm_get_stats(void* runtime, MmRuntimeStats* out_stats);
+/* Optional CPU-R4 Q·K diagnostic. A missing symbol means the counter is unavailable;
+ * callers must not reinterpret that as zero. Returns 0 on success and -1 on error. */
+MM_RUNTIME_API int mm_get_attention_qk_ns(void* runtime, uint64_t* out_ns);
 MM_RUNTIME_API uint64_t mm_lm_head_calls(void* runtime);
 MM_RUNTIME_API int mm_configure_selective_logits(void* runtime, int enabled);
 MM_RUNTIME_API int mm_selective_logits(void* runtime);

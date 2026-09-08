@@ -69,6 +69,13 @@ during an active evaluation and parks between requests. CPU-energy tradeoffs
 were not measured, and this profile is not a universal speed claim. The
 serial `Native_CPP.cmd` remains the default comparison launcher.
 
+CPU-R4.1 restores the pre-CPU-R4 binary layout of `MmRuntimeStats` (1,136
+bytes on x64). Its Q·K diagnostic is queried separately through the optional
+`mm_get_attention_qk_ns` symbol, so old compatible DLLs report that metric as
+unavailable rather than zero. The Python binding rejects the published CPU-R4
+DLL with the shifted statistics layout before calling `mm_get_stats`; see
+[`benchmarks/cpu-r4.1/RESULTS.md`](benchmarks/cpu-r4.1/RESULTS.md).
+
 Use `/clear` to reset the conversation and random generator, and `/exit` to quit.
 A one-shot invocation:
 

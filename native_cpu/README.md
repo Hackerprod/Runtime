@@ -39,6 +39,19 @@ Windows group-0 logical CPUs `0,6`, and contiguous row weights `1332:992`:
 .\compare_cpu\Native_CPP_T0.cmd --prompt "Explain a CPU cache." --metrics-json
 ```
 
+The CPU-R3 four-row FFN GEMV is available as an explicit experiment; it keeps
+the same CPU-R1/CPU-R2 settings and changes only the FP32 gate/up/down
+projections:
+
+```powershell
+python -m native_cpu.tools.chat --model native_cpu/artifacts/minimind-fp32.bin --tokenizer checkpoints/minimind-3-hf --selective-logits --reuse-kv --v-blocked-attention --ffn-row4 --prompt "Explain a CPU cache." --metrics-json
+```
+
+The opt-in route is not the default. The bounded CPU-R3 run is retained in
+[`benchmarks/cpu-r3/RESULTS.md`](benchmarks/cpu-r3/RESULTS.md); its exact-parity
+experiment was rejected because this laptop did not show a reproducible speed
+benefit.
+
 This selection is for the Ryzen AI 5 330 laptop: logical CPU 0 is the fast
 physical-core anchor and logical CPU 6 is the compact-core participant. The
 FP32 kernels, weights, and math are unchanged. The caller's CPU affinity is

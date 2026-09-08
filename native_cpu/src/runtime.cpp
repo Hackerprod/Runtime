@@ -802,7 +802,7 @@ struct Runtime {
         logits_valid = true;
     }
 
-    void prefill_x4(const int32_t* tokens, bool emit_last) {
+    void prefill_x4(const int32_t* tokens, bool emit_last, bool emit_all = false) {
         logits_valid = false;
         for (size_t lane = 0; lane < 4; ++lane) {
             const Tensor& embedding = tensor("model.embed_tokens.weight");
@@ -814,17 +814,27 @@ struct Runtime {
             const LayerWeights& w = layers[layer];
             if (profile_enabled) stats.remaining_ops_calls += 4;
             for (size_t lane = 0; lane < 4; ++lane) {
-                const bool emit = !selective_logits || (emit_last && lane == 3);
+                const bool emit = emit_all || !selective_logits || (emit_last && lane == 3);
                 process_prefill_attention(prefill_states[lane], w, layer,
                                           base_position + static_cast<uint32_t>(lane), emit);
             }
             finish_prefill_ffn_x4(prefill_states[0], prefill_states[1], prefill_states[2], prefill_states[3], w);
         }
         for (size_t lane = 0; lane < 4; ++lane) {
-            const bool emit = !selective_logits || (emit_last && lane == 3);
+            const bool emit = emit_all || !selective_logits || (emit_last && lane == 3);
             finalize_prefill_state(prefill_states[lane], emit, lane == 3);
         }
         position += 4;
+    }
+
+    void verify_x4(const int32_t* tokens, float* output_logits) {
+        if (!prefill_x4_ready) throw std::runtime_error("CPU-E3 verification requires the production FP16 route");
+        prefill_x4(tokens, true, true);
+        const size_t stride = config.vocab;
+        for (size_t lane = 0; lane < 4; ++lane) {
+            std::copy(prefill_states[lane].logits.begin(), prefill_states[lane].logits.end(),
+                      output_logits + lane * stride);
+        }
     }
 
     void step(int32_t token, bool emit_logits = true) {
@@ -1049,6 +1059,12 @@ struct EvalWork {
     bool selective = false;
 };
 
+struct VerifyWork {
+    Runtime* model = nullptr;
+    const int32_t* token_ids = nullptr;
+    float* logits = nullptr;
+};
+
 static void run_eval_work(void* raw) {
     auto* work = static_cast<EvalWork*>(raw);
     size_t offset = 0;
@@ -1066,6 +1082,11 @@ static void run_eval_work(void* raw) {
     }
     if (!work->model->logits_valid) throw std::runtime_error("logits were not produced");
     std::copy(work->model->logits.begin(), work->model->logits.end(), work->last_logits);
+}
+
+static void run_verify_work(void* raw) {
+    auto* work = static_cast<VerifyWork*>(raw);
+    work->model->verify_x4(work->token_ids, work->logits);
 }
 
 } // namespace
@@ -1368,6 +1389,42 @@ MM_RUNTIME_API int mm_eval(void* runtime, const int32_t* token_ids, size_t count
         return -1;
     } catch (...) {
         set_error(error, error_cap, "unknown evaluation failure");
+        return -1;
+    }
+}
+
+MM_RUNTIME_API int mm_verify_x4(void* runtime, const int32_t* token_ids,
+                                float* logits, size_t logits_capacity,
+                                char* error, size_t error_cap) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (token_ids == nullptr) throw std::runtime_error("verification token sequence is null");
+        if (logits == nullptr || logits_capacity < checked_mul(model->config.vocab, 4, "verification logits")) {
+            throw std::runtime_error("verification logit output capacity is too small");
+        }
+        if (4 > model->max_context - model->position) throw std::runtime_error("context capacity exceeded");
+        for (size_t i = 0; i < 4; ++i) {
+            if (token_ids[i] < 0 || static_cast<uint32_t>(token_ids[i]) >= model->config.vocab) {
+                throw std::runtime_error("token ID outside vocabulary");
+            }
+        }
+        const uint32_t old_position = model->position;
+        try {
+            VerifyWork work{model, token_ids, logits};
+            model->parallel.execute(run_verify_work, &work);
+            ++model->cache_epoch;
+        } catch (...) {
+            model->position = old_position;
+            model->logits_valid = false;
+            ++model->cache_epoch;
+            throw;
+        }
+        return 0;
+    } catch (const std::exception& ex) {
+        set_error(error, error_cap, ex.what());
+        return -1;
+    } catch (...) {
+        set_error(error, error_cap, "unknown verification failure");
         return -1;
     }
 }

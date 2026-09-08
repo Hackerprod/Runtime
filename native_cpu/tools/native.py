@@ -76,6 +76,10 @@ class NativeRuntime:
         lib.mm_position.argtypes = [ctypes.c_void_p]; lib.mm_position.restype = ctypes.c_uint32
         lib.mm_backend.argtypes = [ctypes.c_void_p]; lib.mm_backend.restype = ctypes.c_char_p
         lib.mm_eval.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int32), ctypes.c_size_t, ctypes.POINTER(ctypes.c_float), ctypes.c_size_t, ctypes.c_char_p, ctypes.c_size_t]; lib.mm_eval.restype = ctypes.c_int
+        self._verify_x4 = getattr(lib, "mm_verify_x4", None)
+        if self._verify_x4 is not None:
+            self._verify_x4.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_float), ctypes.c_size_t, ctypes.c_char_p, ctypes.c_size_t]
+            self._verify_x4.restype = ctypes.c_int
         self._lm_head_calls = getattr(lib, "mm_lm_head_calls", None)
         if self._lm_head_calls is not None:
             self._lm_head_calls.argtypes = [ctypes.c_void_p]; self._lm_head_calls.restype = ctypes.c_uint64
@@ -248,6 +252,21 @@ class NativeRuntime:
         if self._truncate is None: raise NativeError("native runtime does not support truncation")
         self._error[0] = 0
         if int(self._truncate(self._handle, position, self._error, self._error_cap)) != 0: raise NativeError(self._message("mm_truncate failed"))
+
+    def verify_x4(self, token_ids):
+        """Test-only CPU-E3 hook: verify four known tokens and return all logits."""
+        self._check()
+        if self._verify_x4 is None: raise NativeError("native runtime does not support CPU-E3 verification")
+        ids = np.asarray(token_ids, dtype=np.int32)
+        if ids.ndim != 1 or ids.size != 4: raise ValueError("CPU-E3 verification requires exactly four token IDs")
+        output = np.empty((4, self.vocab_size), dtype=np.float32)
+        self._error[0] = 0
+        rc = self._verify_x4(self._handle,
+                             ids.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+                             output.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                             output.size, self._error, self._error_cap)
+        if int(rc) != 0: raise NativeError(self._message("mm_verify_x4 failed"))
+        return output
 
     @property
     def logits_valid(self):

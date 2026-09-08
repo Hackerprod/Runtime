@@ -93,6 +93,13 @@ MM_RUNTIME_API int mm_eval(void* runtime, const int32_t* token_ids,
                            size_t logits_capacity, char* error,
                            size_t error_cap);
 
+/* Experimental CPU-E3 verification hook. This is not used by production
+ * eval/chat paths: it verifies exactly four known tokens from the current KV
+ * state and returns one complete vocabulary-logit vector per token. */
+MM_RUNTIME_API int mm_verify_x4(void* runtime, const int32_t* token_ids,
+                                float* logits, size_t logits_capacity,
+                                char* error, size_t error_cap);
+
 #ifdef __cplusplus
 }
 #endif

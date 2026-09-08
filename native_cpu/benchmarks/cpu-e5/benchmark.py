@@ -193,6 +193,22 @@ def _parse_jsonl(stdout: str) -> list[dict]:
     return rows
 
 
+def _build_identity(executable: Path) -> dict:
+    build_info_path = ROOT / "native_cpu" / "build-e5" / "build-info.json"
+    if not build_info_path.is_file():
+        raise FileNotFoundError(f"build identity not found: {build_info_path}")
+    build = json.loads(build_info_path.read_text(encoding="utf8"))
+    build.update({
+        "schema": "cpu-e5/build-info-v1",
+        "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+        "benchmark_executable": str(executable),
+        "benchmark_executable_sha256": sha256(executable),
+        "benchmark_source_sha256": sha256(Path(__file__).with_name("kernel_bench.cpp")),
+        "cmake_sha256": sha256(ROOT / "native_cpu" / "CMakeLists.txt"),
+    })
+    return build
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, default=CHECKPOINT)
@@ -239,6 +255,7 @@ def main(argv: list[str] | None = None) -> int:
             raise RuntimeError(f"benchmark parity failure: {row}")
         if row.get("cpu") != 0 or row.get("threads") != 1:
             raise RuntimeError(f"benchmark affinity failure: {row}")
+    build_identity = _build_identity(args.benchmark_exe)
     identity = {
         "schema": "cpu-e5/isolated-attention-v1",
         "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
@@ -264,8 +281,12 @@ def main(argv: list[str] | None = None) -> int:
         "x1_candidate": "gemv_f16",
         "x4_reference": "four independent gemv_f16 calls",
         "x4_candidate": "gemv_f16_x4",
+        "compiler": build_identity.get("compiler"),
+        "compile_flags": build_identity.get("compile_flags"),
+        "generator": build_identity.get("generator"),
     }
     _write_json(args.out / "reconstruction.json", _json_evidence(evidence))
+    _write_json(args.out.parent / "build-info.json", build_identity)
     for row in rows:
         _write_json(args.out / f"cpu-e5-layer{row['layer']}-{row['projection']}-pair{row['pair']:02d}.json", {**row, "identity": identity, "command": benchmark_command})
     _write_json(args.out / "identity.json", identity)

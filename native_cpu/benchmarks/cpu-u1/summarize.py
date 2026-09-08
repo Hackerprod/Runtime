@@ -167,6 +167,13 @@ def evaluate(summary: dict[str, Any]):
         metrics = _case_metrics(rows, workload) if len(rows) == PAIR_COUNT else {}
         if any(value is None for value in metrics.values()):
             reasons.append(f"missing or invalid timing evidence: {key}")
+        for _, _, left, right, _ in rows:
+            effective = right.get("effective")
+            if not isinstance(effective, dict) or any(effective.get(name) is not True for name in
+                    ("selective_logits", "v_blocked_attention", "ffn_f16_storage", "gqa_k_shared", "gqa_v_shared")):
+                reasons.append(f"candidate is not using the consolidated production route: {key}")
+            if isinstance(effective, dict) and effective.get("ffn_row4") is not False:
+                reasons.append(f"rejected CPU-R3 row4 route is active: {key}")
     required_identity = {
         "reference_runtime_commit", "candidate_runtime_commit", "measurement_tree_commit",
         "reference_library_sha256", "candidate_library_sha256", "model_sha256", "tokenizer_sha256",
@@ -270,6 +277,25 @@ def render(summary: dict[str, Any], evaluation: dict[str, Any]):
             f"{_fmt_seconds(median_field('storage_preparation_seconds', 'A'))} | {_fmt_seconds(median_field('storage_preparation_seconds', 'B'))} |"
         )
     lines += [
+        "",
+        "## Compact FFN memory",
+        "| Case | A compact bytes | B compact bytes |",
+        "|---|---:|---:|",
+    ]
+    for key in REQUIRED_CASES:
+        case_rows = rows.get(key, [])
+        def median_field(field, profile):
+            values = [(left if profile == "A" else right).get(field) for _, _, left, right, _ in case_rows]
+            return statistics.median(values) if values and all(_is_number(value) for value in values) else None
+        a_bytes = median_field("ffn_f16_storage_bytes", "A")
+        b_bytes = median_field("ffn_f16_storage_bytes", "B")
+        lines.append(f"| {key} | {('unavailable' if a_bytes is None else f'{int(a_bytes):,} bytes')} | {('unavailable' if b_bytes is None else f'{int(b_bytes):,} bytes')} |")
+    lines += [
+        "",
+        "The consolidated route prepares exact FP16 FFN storage during model load;",
+        "the preparation counter above is reported separately and is not included in",
+        "sustained prefill/decode timings. The retained FP32 tensors mean these bytes are",
+        "additional representation memory, not a total-RAM reduction.",
         "",
         "## Parity and availability",
         "- Forced-prefix receipts compare exact FP32 logits hashes for the prefill and every decode token, plus token IDs and final position.",

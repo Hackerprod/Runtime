@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <vector>
 
@@ -29,6 +30,21 @@ void test_f32(std::size_t rows, std::size_t cols) {
   mm::gemv_f32(weights.data(), x.data(), automatic.data(), rows, cols,
                mm::KernelMode::Auto);
   check_close(scalar, automatic, 3e-5f);
+}
+
+void test_f32_row4_exact(std::size_t rows, std::size_t cols) {
+  std::vector<float> weights(rows * cols), baseline(rows), row4(rows), x(cols);
+  for (std::size_t i = 0; i < weights.size(); ++i)
+    weights[i] = static_cast<float>((static_cast<int>(i * 19u % 31u) - 15)) * 0.03125f;
+  for (std::size_t i = 0; i < cols; ++i)
+    x[i] = std::sin(static_cast<float>(i) * 0.13f) + 0.01f;
+  for (mm::KernelMode mode : {mm::KernelMode::Scalar, mm::KernelMode::Auto}) {
+    std::fill(baseline.begin(), baseline.end(), 0.0f);
+    std::fill(row4.begin(), row4.end(), 0.0f);
+    mm::gemv_f32(weights.data(), x.data(), baseline.data(), rows, cols, mode);
+    mm::gemv_f32_row4(weights.data(), x.data(), row4.data(), rows, cols, mode);
+    assert(std::memcmp(baseline.data(), row4.data(), rows * sizeof(float)) == 0);
+  }
 }
 
 void test_q4(std::size_t rows, std::size_t cols) {
@@ -82,6 +98,9 @@ void test_q4_known_nibbles() {
 int main() {
   test_f32(768, 384);
   test_f32(2, 2432);
+  for (std::size_t rows : {1u, 3u, 4u, 5u, 7u, 8u, 9u}) {
+    for (std::size_t cols : {1u, 7u, 8u, 9u, 2432u}) test_f32_row4_exact(rows, cols);
+  }
   test_q4(3, 33);
   test_q4(3, 65);
   test_q4(4, 2432);

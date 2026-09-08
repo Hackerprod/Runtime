@@ -704,6 +704,32 @@ void test_v_blocked_attention_contract() {
     std::filesystem::remove(path);
 }
 
+void test_ffn_row4_contract() {
+    const auto path = write_file(threading_fixture(false), ".ffn-row4");
+    const std::vector<int32_t> prefix = {1, 4, 7, 2, 9, 11, 3, 8, 5, 6, 10, 12};
+    const std::vector<int32_t> suffix = {13, 14, 15};
+    assert(mm_configure_ffn_row4(nullptr, 1) == -1);
+    assert(mm_ffn_row4(nullptr) == 0);
+    for (int mode : {0, 1}) for (uint32_t threads : {1u, 2u, 4u}) for (int selective : {0, 1}) {
+        ScopedRuntime reference(path, mode), candidate(path, mode);
+        configure(reference.value, threads);
+        configure(candidate.value, threads);
+        assert(mm_configure_selective_logits(reference.value, selective) == 0);
+        assert(mm_configure_selective_logits(candidate.value, selective) == 0);
+        assert(mm_configure_v_blocked_attention(reference.value, 1) == 0);
+        assert(mm_configure_v_blocked_attention(candidate.value, 1) == 0);
+        assert(mm_ffn_row4(candidate.value) == 0);
+        assert(mm_configure_ffn_row4(candidate.value, 1) == 0);
+        assert(mm_ffn_row4(candidate.value) == 1);
+        assert_exact(evaluate(candidate.value, prefix), evaluate(reference.value, prefix));
+        assert_exact(evaluate(candidate.value, suffix), evaluate(reference.value, suffix));
+        assert(mm_configure_ffn_row4(candidate.value, 0) == 0);
+        assert(mm_ffn_row4(candidate.value) == 0);
+        assert_exact(evaluate(candidate.value, {16}), evaluate(reference.value, {16}));
+    }
+    std::filesystem::remove(path);
+}
+
 void test_truncate_contract() {
     const auto path = write_file(threading_fixture(false), ".truncate");
     const std::vector<int32_t> prefix = {1, 4, 7, 2, 9, 3, 5, 6};
@@ -783,6 +809,7 @@ int main() {
     test_diagnostic_profile_contract();
     test_selective_logits_contract();
     test_v_blocked_attention_contract();
+    test_ffn_row4_contract();
     test_truncate_contract();
     test_cache_reset_and_overflow();
     test_crc_and_truncation();

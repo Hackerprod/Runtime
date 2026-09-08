@@ -73,6 +73,10 @@ class ComparePolicyTests(unittest.TestCase):
         self.assertFalse(compare.make_parser().parse_args([]).selective_logits)
         self.assertTrue(compare.make_parser().parse_args(["--selective-logits"]).selective_logits)
 
+    def test_ffn_row4_flag_is_opt_in(self):
+        self.assertFalse(compare.make_parser().parse_args([]).ffn_row4)
+        self.assertTrue(compare.make_parser().parse_args(["--ffn-row4"]).ffn_row4)
+
     def test_chat_profile_defaults(self):
         args = compare.resolve_policy(compare.make_parser().parse_args([]))
         self.assertEqual(args.temperature, 0.9)

@@ -46,6 +46,8 @@ MM_RUNTIME_API int mm_configure_selective_logits(void* runtime, int enabled);
 MM_RUNTIME_API int mm_selective_logits(void* runtime);
 MM_RUNTIME_API int mm_configure_v_blocked_attention(void* runtime, int enabled);
 MM_RUNTIME_API int mm_v_blocked_attention(void* runtime);
+MM_RUNTIME_API int mm_configure_ffn_row4(void* runtime, int enabled);
+MM_RUNTIME_API int mm_ffn_row4(void* runtime);
 MM_RUNTIME_API int mm_truncate(void* runtime, uint32_t position, char* error, size_t error_cap);
 MM_RUNTIME_API int mm_logits_valid(void* runtime);
 MM_RUNTIME_API uint64_t mm_cache_epoch(void* runtime);

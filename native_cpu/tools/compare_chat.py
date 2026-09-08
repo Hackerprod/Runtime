@@ -110,11 +110,13 @@ def build_session(args):
         diagnostics = bool(getattr(args, "diagnostics", False))
         reuse_kv = bool(getattr(args, "reuse_kv", False))
         v_blocked_attention = bool(getattr(args, "v_blocked_attention", False))
-        if args.backend == "original" and (threads != 1 or cpus is not None or row_weights is not None or selective_logits or diagnostics or reuse_kv or v_blocked_attention):
+        ffn_row4 = bool(getattr(args, "ffn_row4", False))
+        if args.backend == "original" and (threads != 1 or cpus is not None or row_weights is not None or selective_logits or diagnostics or reuse_kv or v_blocked_attention or ffn_row4):
             if selective_logits: raise ValueError("--selective-logits is supported only by the native backend")
             if diagnostics: raise ValueError("--diagnostics is supported only by the native backend")
             if reuse_kv: raise ValueError("--reuse-kv is supported only by the native backend")
             if v_blocked_attention: raise ValueError("--v-blocked-attention is supported only by the native backend")
+            if ffn_row4: raise ValueError("--ffn-row4 is supported only by the native backend")
             raise ValueError("thread affinity and row-sharding options are supported only by the native backend")
         if args.backend == "native":
             _require_file(args.model, "native FP32 model", "--model"); _require_file(args.library, "native library", "--library")
@@ -137,6 +139,9 @@ def build_session(args):
         v_blocked = getattr(runtime, "configure_v_blocked_attention", None)
         if v_blocked_attention and v_blocked is None: raise ValueError("native runtime does not support V-blocked attention")
         if v_blocked is not None: v_blocked(v_blocked_attention)
+        ffn = getattr(runtime, "configure_ffn_row4", None)
+        if ffn_row4 and ffn is None: raise ValueError("native runtime does not support FFN row4")
+        if ffn is not None: ffn(ffn_row4)
         counted = CountedRuntime(runtime)
         session = ChatSession(counted, tokenizer, context_limit=args.context_limit, max_new_tokens=args.max_new_tokens,
                               temperature=args.temperature, seed=args.seed, system=getattr(args, "system", None),
@@ -172,6 +177,7 @@ def response_metrics(args, result, counted, loading_seconds):
             "selective_logits": bool(getattr(args, "selective_logits", False)),
             "reuse_kv": bool(getattr(args, "reuse_kv", False)),
             "v_blocked_attention": bool(getattr(args, "v_blocked_attention", False)),
+            "ffn_row4": bool(getattr(args, "ffn_row4", False)),
             "decode_tokens_per_second": counted.decode_evaluated_tokens / result.decode_seconds if counted.decode_evaluated_tokens and result.decode_seconds > 0 else None,
             "finish_reason": "eos" if result.generated_tokens < args.max_new_tokens else "length"}
 
@@ -201,6 +207,7 @@ def make_parser():
     parser.add_argument("--selective-logits", action="store_true", help="evaluate vocabulary logits only when requested")
     parser.add_argument("--reuse-kv", action="store_true", help="reuse verified KV prefixes between turns")
     parser.add_argument("--v-blocked-attention", action="store_true", help="use experimental contiguous-dimension V accumulation (off by default)")
+    parser.add_argument("--ffn-row4", action="store_true", help="use experimental four-row FP32 FFN GEMV (off by default)")
     parser.add_argument("--cpus", help="comma-separated Windows group-0 logical CPU indices in participant order")
     parser.add_argument("--row-weights", dest="row_weights", help="comma-separated positive native row-shard weights")
     return parser

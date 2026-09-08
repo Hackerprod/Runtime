@@ -118,6 +118,48 @@ MM_TARGET_AVX2 MM_NOINLINE void gemv_f32_avx2(
   }
 }
 
+MM_TARGET_AVX2 MM_NOINLINE void gemv_f32_row4_avx2(
+    const float* weights, const float* x, float* y, std::size_t rows,
+    std::size_t cols) noexcept {
+  std::size_t row = 0;
+  for (; row + 4u <= rows; row += 4u) {
+    const float* w0 = weights + (row + 0u) * cols;
+    const float* w1 = weights + (row + 1u) * cols;
+    const float* w2 = weights + (row + 2u) * cols;
+    const float* w3 = weights + (row + 3u) * cols;
+    __m256 acc0 = _mm256_setzero_ps();
+    __m256 acc1 = _mm256_setzero_ps();
+    __m256 acc2 = _mm256_setzero_ps();
+    __m256 acc3 = _mm256_setzero_ps();
+    std::size_t col = 0;
+    for (; col + 8u <= cols; col += 8u) {
+      // Load each activation fragment once and reuse it across four rows.
+      const __m256 input = _mm256_loadu_ps(x + col);
+      acc0 = _mm256_fmadd_ps(_mm256_loadu_ps(w0 + col), input, acc0);
+      acc1 = _mm256_fmadd_ps(_mm256_loadu_ps(w1 + col), input, acc1);
+      acc2 = _mm256_fmadd_ps(_mm256_loadu_ps(w2 + col), input, acc2);
+      acc3 = _mm256_fmadd_ps(_mm256_loadu_ps(w3 + col), input, acc3);
+    }
+    float sum0 = horizontal_sum(acc0);
+    float sum1 = horizontal_sum(acc1);
+    float sum2 = horizontal_sum(acc2);
+    float sum3 = horizontal_sum(acc3);
+    for (; col < cols; ++col) {
+      sum0 += w0[col] * x[col];
+      sum1 += w1[col] * x[col];
+      sum2 += w2[col] * x[col];
+      sum3 += w3[col] * x[col];
+    }
+    y[row + 0u] = sum0;
+    y[row + 1u] = sum1;
+    y[row + 2u] = sum2;
+    y[row + 3u] = sum3;
+  }
+  if (row < rows) {
+    gemv_f32_avx2(weights + row * cols, x, y + row, rows - row, cols);
+  }
+}
+
 MM_TARGET_AVX2 MM_NOINLINE void gemv_q4_avx2(
     const std::uint8_t* packed, const float* scales, const float* x,
     float* y, std::size_t rows, std::size_t cols) noexcept {
@@ -179,6 +221,20 @@ void gemv_f32(const float* weights, const float* x, float* y, std::size_t rows,
   }
   if (use_avx2(mode)) {
     gemv_f32_avx2(weights, x, y, rows, cols);
+  } else {
+    gemv_f32_scalar(weights, x, y, rows, cols);
+  }
+}
+
+void gemv_f32_row4(const float* weights, const float* x, float* y,
+                   std::size_t rows, std::size_t cols,
+                   KernelMode mode) noexcept {
+  if (weights == nullptr || x == nullptr || y == nullptr || rows == 0 ||
+      cols == 0) {
+    return;
+  }
+  if (use_avx2(mode)) {
+    gemv_f32_row4_avx2(weights, x, y, rows, cols);
   } else {
     gemv_f32_scalar(weights, x, y, rows, cols);
   }

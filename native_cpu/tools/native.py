@@ -84,6 +84,8 @@ class NativeRuntime:
         self._truncate = getattr(lib, "mm_truncate", None)
         self._configure_v_blocked_attention = getattr(lib, "mm_configure_v_blocked_attention", None)
         self._query_v_blocked_attention = getattr(lib, "mm_v_blocked_attention", None)
+        self._configure_ffn_row4 = getattr(lib, "mm_configure_ffn_row4", None)
+        self._query_ffn_row4 = getattr(lib, "mm_ffn_row4", None)
         self._query_logits_valid = getattr(lib, "mm_logits_valid", None)
         self._query_epoch = getattr(lib, "mm_cache_epoch", None)
         if self._configure_selective is not None:
@@ -96,6 +98,10 @@ class NativeRuntime:
             self._configure_v_blocked_attention.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_v_blocked_attention.restype = ctypes.c_int
         if self._query_v_blocked_attention is not None:
             self._query_v_blocked_attention.argtypes = [ctypes.c_void_p]; self._query_v_blocked_attention.restype = ctypes.c_int
+        if self._configure_ffn_row4 is not None:
+            self._configure_ffn_row4.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_ffn_row4.restype = ctypes.c_int
+        if self._query_ffn_row4 is not None:
+            self._query_ffn_row4.argtypes = [ctypes.c_void_p]; self._query_ffn_row4.restype = ctypes.c_int
         if self._query_logits_valid is not None:
             self._query_logits_valid.argtypes = [ctypes.c_void_p]; self._query_logits_valid.restype = ctypes.c_int
         if self._query_epoch is not None:
@@ -232,6 +238,19 @@ class NativeRuntime:
         self._check()
         if self._query_v_blocked_attention is None: return False
         return bool(self._query_v_blocked_attention(self._handle))
+
+    def configure_ffn_row4(self, enabled=True):
+        self._check()
+        if self._configure_ffn_row4 is None:
+            if not enabled: return
+            raise NativeError("native runtime does not support FFN row4")
+        if int(self._configure_ffn_row4(self._handle, int(bool(enabled)))) != 0: raise NativeError("mm_configure_ffn_row4 failed")
+
+    @property
+    def ffn_row4(self):
+        self._check()
+        if self._query_ffn_row4 is None: return False
+        return bool(self._query_ffn_row4(self._handle))
 
     def configure_profile(self, enabled=True):
         self._check()

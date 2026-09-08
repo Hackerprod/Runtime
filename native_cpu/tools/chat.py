@@ -348,6 +348,7 @@ def _response_json(r, args):
         "selective_logits": bool(getattr(args, "selective_logits", False)),
         "reuse_kv": bool(getattr(args, "reuse_kv", False)),
         "v_blocked_attention": bool(getattr(args, "v_blocked_attention", False)),
+        "ffn_row4": bool(getattr(args, "ffn_row4", False)),
     }
 
 
@@ -386,6 +387,7 @@ def main(argv=None):
     p.add_argument("--selective-logits", action="store_true", help="evaluate vocabulary logits only when requested")
     p.add_argument("--reuse-kv", action="store_true", help="reuse verified KV prefixes between turns")
     p.add_argument("--v-blocked-attention", action="store_true", help="use experimental contiguous-dimension V accumulation (off by default)")
+    p.add_argument("--ffn-row4", action="store_true", help="use experimental four-row FP32 FFN GEMV (off by default)")
     args = _resolve_profile(p.parse_args(argv))
     if args.max_new_tokens < 0: p.error("--max-new-tokens must be non-negative")
     if args.context_limit < 2: p.error("--context-limit must be at least 2")
@@ -403,6 +405,9 @@ def main(argv=None):
             v_blocked = getattr(runtime, "configure_v_blocked_attention", None)
             if args.v_blocked_attention and v_blocked is None: raise NativeError("native runtime does not support V-blocked attention")
             if v_blocked is not None: v_blocked(bool(args.v_blocked_attention))
+            ffn_row4 = getattr(runtime, "configure_ffn_row4", None)
+            if args.ffn_row4 and ffn_row4 is None: raise NativeError("native runtime does not support FFN row4")
+            if ffn_row4 is not None: ffn_row4(bool(args.ffn_row4))
             session = ChatSession(runtime, tokenizer, context_limit=args.context_limit,
                                   max_new_tokens=args.max_new_tokens,
                                   temperature=args.temperature, top_k=args.top_k,

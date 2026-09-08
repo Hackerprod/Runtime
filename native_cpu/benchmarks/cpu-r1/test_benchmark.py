@@ -94,3 +94,23 @@ def test_effective_configuration_checks_v_blocked_attention():
   threads=1;cpus=[0];row_weights=[1];selective_logits=True;v_blocked_attention=False
  cfg={"threads":1,"cpus":[0],"row_weights":[1],"selective_logits":True,"reuse_kv":True,"v_blocked_attention":True}
  with pytest.raises(AssertionError): benchmark.effective(Runtime(),cfg,False)
+
+def test_cpu_r3_case_matrix_is_bounded_to_requested_prefixes():
+ class A: suite="cpu-r3";subset=None;prefix_lengths=[64,256,1024,1792];diagnostic_context=256
+ cases=benchmark.make_cases(A())
+ assert [c["key"] for c in cases]==[
+  "cpu-r3-speed-F0-F1-256",
+  "cpu-r3-diagnostics-F0-F1-256",
+  "cpu-r3-speed-F0-F1-1792",
+  "cpu-r3-diagnostics-F0-F1-1792",
+ ]
+ assert all(c["left"]=="F0" and c["right"]=="F1" and c["workload"]=="forced" for c in cases)
+ assert [bool(c.get("diagnostics")) for c in cases]==[False,True,False,True]
+ assert benchmark.PROFILES["F0"]["v_blocked_attention"] and not benchmark.PROFILES["F0"]["ffn_row4"]
+ assert benchmark.PROFILES["F1"]["v_blocked_attention"] and benchmark.PROFILES["F1"]["ffn_row4"]
+
+def test_effective_configuration_checks_ffn_row4():
+ class Runtime:
+  threads=1;cpus=[0];row_weights=[1];selective_logits=True;v_blocked_attention=True;ffn_row4=False
+ cfg={"threads":1,"cpus":[0],"row_weights":[1],"selective_logits":True,"reuse_kv":True,"v_blocked_attention":True,"ffn_row4":True}
+ with pytest.raises(AssertionError): benchmark.effective(Runtime(),cfg,False)

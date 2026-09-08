@@ -24,6 +24,13 @@ void gemv_f32(const float* weights, const float* x, float* y,
               std::size_t rows, std::size_t cols,
               KernelMode mode = KernelMode::Auto) noexcept;
 
+// Row-major FP32 matrix-vector product using four independent row accumulators
+// per block. The arithmetic order within each row matches gemv_f32; rows that
+// do not complete a block use the existing implementation.
+void gemv_f32_row4(const float* weights, const float* x, float* y,
+                   std::size_t rows, std::size_t cols,
+                   KernelMode mode = KernelMode::Auto) noexcept;
+
 // Row-major symmetric packed-Q4 matrix-vector product. Each row has
 // ceil(cols / 2) bytes and ceil(cols / 32) FP32 scales. The even element is
 // stored in the low nibble; decoded value is (nibble - 8) * scale.

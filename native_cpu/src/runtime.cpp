@@ -307,6 +307,7 @@ struct Runtime {
     bool profile_enabled = false;
     bool selective_logits = false;
     bool v_blocked_attention = false;
+    bool ffn_row4 = false;
     bool logits_valid = false;
     std::uint64_t cache_epoch = 0;
     Config config;
@@ -407,11 +408,13 @@ struct Runtime {
         for (size_t i = 0; i < size; ++i) output[i] = input[i] * inv * weight.f32[i];
     }
 
-    void gemv(const Tensor& weight, const float* input, float* output, ProfileOp op = ProfileOp::Remaining) {
+    void gemv(const Tensor& weight, const float* input, float* output,
+              ProfileOp op = ProfileOp::Remaining, bool use_ffn_row4 = false) {
         const uint32_t rows = static_cast<uint32_t>(weight.rows());
         const uint32_t cols = static_cast<uint32_t>(weight.cols());
         const auto started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-        if (weight.dtype == 0) parallel.gemv_f32(weight.f32.data(), input, output, rows, cols, kernel_mode);
+        if (weight.dtype == 0 && use_ffn_row4 && ffn_row4) parallel.gemv_f32_row4(weight.f32.data(), input, output, rows, cols, kernel_mode);
+        else if (weight.dtype == 0) parallel.gemv_f32(weight.f32.data(), input, output, rows, cols, kernel_mode);
         else parallel.gemv_q4(weight.q4.data(), weight.scales.data(), input, output, rows, cols, kernel_mode);
         if (profile_enabled) {
             const auto ns = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count());
@@ -545,13 +548,13 @@ struct Runtime {
             gemv(*w.o_proj, attention.data(), projection.data(), ProfileOp::Output);
             for (uint32_t d = 0; d < config.hidden; ++d) hidden[d] = residual[d] + projection[d];
             rms_norm(hidden, *w.post_attention_norm, config.rms_eps, normed);
-            gemv(*w.gate_proj, normed.data(), intermediate.data(), ProfileOp::Ffn);
-            gemv(*w.up_proj, normed.data(), ffn_up.data(), ProfileOp::Ffn);
+            gemv(*w.gate_proj, normed.data(), intermediate.data(), ProfileOp::Ffn, true);
+            gemv(*w.up_proj, normed.data(), ffn_up.data(), ProfileOp::Ffn, true);
             for (uint32_t d = 0; d < config.intermediate; ++d) {
                 const float gate = intermediate[d];
                 intermediate[d] = (gate / (1.0f + std::exp(-gate))) * ffn_up[d];
             }
-            gemv(*w.down_proj, intermediate.data(), projection.data(), ProfileOp::Ffn);
+            gemv(*w.down_proj, intermediate.data(), projection.data(), ProfileOp::Ffn, true);
             for (uint32_t d = 0; d < config.hidden; ++d) hidden[d] += projection[d];
         }
         rms_norm(hidden, tensor("model.norm.weight"), config.rms_eps, normed);
@@ -711,6 +714,15 @@ MM_RUNTIME_API int mm_configure_v_blocked_attention(void* runtime, int enabled) 
 
 MM_RUNTIME_API int mm_v_blocked_attention(void* runtime) {
     try { return checked_runtime(runtime)->v_blocked_attention ? 1 : 0; } catch (...) { return 0; }
+}
+
+MM_RUNTIME_API int mm_configure_ffn_row4(void* runtime, int enabled) {
+    if (enabled != 0 && enabled != 1) return -1;
+    try { checked_runtime(runtime)->ffn_row4 = enabled != 0; return 0; } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_ffn_row4(void* runtime) {
+    try { return checked_runtime(runtime)->ffn_row4 ? 1 : 0; } catch (...) { return 0; }
 }
 
 MM_RUNTIME_API int mm_configure_threads(void* runtime, uint32_t threads,

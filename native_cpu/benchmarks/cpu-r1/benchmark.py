@@ -10,8 +10,8 @@ from native_cpu.tools.native import NativeRuntime
 HISTORICAL_PROMPTS=["Can you help me with programming?","Can you help me with programming?","talk me about how study programming","c#","I like c# languaje","talk me more about languajes please"]
 SECOND_PROMPTS=["Name one benefit of tests.","Define latency briefly."]
 CONVERSATIONS={"historical":HISTORICAL_PROMPTS,"second":SECOND_PROMPTS}
-PROFILES={n:dict(selective_logits=s,reuse_kv=k,threads=1,cpus=[0],row_weights=[1],v_blocked_attention=False) for n,s,k in [("R0",False,False),("R1",True,False),("R2",False,True),("R3",True,True)]}
-PROFILES.update(S0=dict(PROFILES["R3"],cpus=None),S1=dict(PROFILES["R3"]),P2=dict(PROFILES["R3"],threads=2,cpus=[0,6],row_weights=[1332,992]),P4=dict(PROFILES["R3"],threads=4,cpus=[0,2,4,6],row_weights=[1]*4),V0=dict(PROFILES["R3"]),V1=dict(PROFILES["R3"],v_blocked_attention=True))
+PROFILES={n:dict(selective_logits=s,reuse_kv=k,threads=1,cpus=[0],row_weights=[1],v_blocked_attention=False,ffn_row4=False) for n,s,k in [("R0",False,False),("R1",True,False),("R2",False,True),("R3",True,True)]}
+PROFILES.update(S0=dict(PROFILES["R3"],cpus=None),S1=dict(PROFILES["R3"]),P2=dict(PROFILES["R3"],threads=2,cpus=[0,6],row_weights=[1332,992]),P4=dict(PROFILES["R3"],threads=4,cpus=[0,2,4,6],row_weights=[1]*4),V0=dict(PROFILES["R3"]),V1=dict(PROFILES["R3"],v_blocked_attention=True),F0=dict(PROFILES["R3"],v_blocked_attention=True),F1=dict(PROFILES["R3"],v_blocked_attention=True,ffn_row4=True))
 ATTRIBUTION_PAIRS=[("R0","R1"),("R0","R2"),("R0","R3")]
 SCALING_PAIRS=[("S1","S0"),("S1","P2"),("S1","P4")]
 TIMES=("prefill_seconds","native_generation_seconds","sampling_seconds","prompt_prepare_seconds","frontend_other_seconds","generation_seconds","native_seconds","total_seconds")
@@ -62,11 +62,12 @@ def warmup(rt,reps):
     rt.reset();rt.reset_stats()
 
 def effective(rt,cfg,diagnostics,session=None):
-    actual=dict(threads=rt.threads,cpus=rt.cpus,row_weights=rt.row_weights,selective_logits=rt.selective_logits,reuse_kv=session.reuse_kv if session else False,v_blocked_attention=getattr(rt,"v_blocked_attention",False),diagnostics=diagnostics)
+    actual=dict(threads=rt.threads,cpus=rt.cpus,row_weights=rt.row_weights,selective_logits=rt.selective_logits,reuse_kv=session.reuse_kv if session else False,v_blocked_attention=getattr(rt,"v_blocked_attention",False),ffn_row4=getattr(rt,"ffn_row4",False),diagnostics=diagnostics)
     assert actual["threads"]==cfg["threads"] and actual["row_weights"]==cfg["row_weights"]
     assert actual["cpus"]==(cfg["cpus"] if cfg["cpus"] is not None else [-1]*cfg["threads"])
     assert actual["selective_logits"]==cfg["selective_logits"]
     assert actual["v_blocked_attention"]==cfg.get("v_blocked_attention",False)
+    assert actual["ffn_row4"]==cfg.get("ffn_row4",False)
     if session: assert actual["reuse_kv"]==cfg["reuse_kv"]
     return actual
 
@@ -131,6 +132,10 @@ def make_cases(args):
         for n in (256,1792):
             cases.append(dict(key=f"cpu-r2-speed-V0-V1-{n}",family="cpu-r2-speed",left="V0",right="V1",workload="forced",length=n))
             cases.append(dict(key=f"cpu-r2-diagnostics-V0-V1-{n}",family="cpu-r2-diagnostics",left="V0",right="V1",workload="forced",length=n,diagnostics=True))
+    if args.suite == "cpu-r3":
+        for n in (256,1792):
+            cases.append(dict(key=f"cpu-r3-speed-F0-F1-{n}",family="cpu-r3-speed",left="F0",right="F1",workload="forced",length=n))
+            cases.append(dict(key=f"cpu-r3-diagnostics-F0-F1-{n}",family="cpu-r3-diagnostics",left="F0",right="F1",workload="forced",length=n,diagnostics=True))
     if args.subset:
         requested=args.subset.split(",")
         cases=[c for c in cases if any(x in (c["key"],c["family"],c["workload"]) for x in requested)]
@@ -141,7 +146,7 @@ def run_entry(args,case,active,tokenizer):
     diagnostics=bool(case.get("diagnostics")) or (case["workload"]=="diagnostics" and active.endswith("-on"))
     cfg=PROFILES[case.get("profile",active)];before=environment()
     with NativeRuntime(args.model,args.library,2048,threads=cfg["threads"],cpus=cfg["cpus"],row_weights=cfg["row_weights"]) as rt:
-        rt.configure_selective_logits(cfg["selective_logits"]);rt.configure_v_blocked_attention(cfg.get("v_blocked_attention",False));rt.configure_profile(diagnostics);warmup(rt,args.warmups)
+        rt.configure_selective_logits(cfg["selective_logits"]);rt.configure_v_blocked_attention(cfg.get("v_blocked_attention",False));rt.configure_ffn_row4(cfg.get("ffn_row4",False));rt.configure_profile(diagnostics);warmup(rt,args.warmups)
         if case["workload"] in CONVERSATIONS:
             maximum=args.max_new_tokens if case["workload"]=="historical" else args.second_max_new_tokens
             data,session=run_conversation(rt,tokenizer,cfg,CONVERSATIONS[case["workload"]],maximum)
@@ -166,7 +171,7 @@ def aggregate(case,pairs):
 def build_parser():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--model",type=Path,default=ROOT/"native_cpu/artifacts/minimind-fp32.bin");p.add_argument("--library",type=Path,default=ROOT/"native_cpu/build/Release/minimind_cpu.dll");p.add_argument("--tokenizer",type=Path,default=ROOT/"checkpoints/minimind-3-hf")
-    p.add_argument("--out",type=Path,required=True);p.add_argument("--suite",choices=("conversation","forced","diagnostics","all","cpu-r2"),default="all")
+    p.add_argument("--out",type=Path,required=True);p.add_argument("--suite",choices=("conversation","forced","diagnostics","all","cpu-r2","cpu-r3"),default="all")
     p.add_argument("--subset",help="comma-separated exact case, family or workload names")
     p.add_argument("--pairs",type=int,default=6);p.add_argument("--warmups",type=int,default=1);p.add_argument("--max-new-tokens",type=int,default=256);p.add_argument("--second-max-new-tokens",type=int,default=64)
     p.add_argument("--prefix-lengths",default="64,256,1024,1792");p.add_argument("--diagnostic-context",type=int,default=256);p.add_argument("--continuation",type=int,default=32);p.add_argument("--resume",action="store_true")

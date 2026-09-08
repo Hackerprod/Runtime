@@ -30,6 +30,11 @@ if(BUILD_TESTING)
   target_include_directories(mm_bench_cpu_e1 PRIVATE include)
   mm_compile_options(mm_bench_cpu_e1)
 
+  # Standalone CPU-E5 FP16 storage/x4 benchmark; it is not connected to the runtime.
+  add_executable(mm_bench_cpu_e5 benchmarks/cpu-e5/kernel_bench.cpp src/kernels.cpp)
+  target_include_directories(mm_bench_cpu_e5 PRIVATE include)
+  mm_compile_options(mm_bench_cpu_e5)
+
   add_executable(mm_test_runtime tests/test_runtime.cpp)
   target_link_libraries(mm_test_runtime PRIVATE minimind_cpu)
   mm_compile_options(mm_test_runtime)
@@ -44,3 +49,4 @@ if(BUILD_TESTING)
     endif()
   endforeach()
 endif()
+

@@ -1,0 +1,90 @@
+{
+  "identity": {
+    "schema": "cpu-e3/verify-x4-v1",
+    "source_commit": "bc5f304ee8b5ecf24790ffae64b0272b27ad89e3",
+    "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+    "baseline_library_sha256": "3ff9418181d29ad9f7761e2a48866f06759027b4599ef1d024f24ac4cd3acfd5",
+    "candidate_library_sha256": "fa02d0b58ec08904b70aaedd24099a578186d921c26058460780094c43c8e1f2",
+    "threads": 1,
+    "cpus": [
+      0
+    ],
+    "row_weights": [
+      1
+    ],
+    "profiler": false,
+    "prefix_lengths": [
+      256,
+      1792
+    ],
+    "pairs": 3,
+    "verified_tokens": 4,
+    "timed_operation": "four complete logits and KV states; context preparation excluded"
+  },
+  "case": {
+    "key": "cpu-e3-verify-x4-1792",
+    "length": 1792
+  },
+  "pair": 3,
+  "order": [
+    "A",
+    "B"
+  ],
+  "entries": [
+    {
+      "profile": "A",
+      "library_sha256": "3ff9418181d29ad9f7761e2a48866f06759027b4599ef1d024f24ac4cd3acfd5",
+      "loading_seconds": 1.204575200099498,
+      "context_preparation_seconds": 15.839659699937329,
+      "verification_seconds": 0.0770974000915885,
+      "logits_sha256": [
+        "2560f237e25f04de1d7f1a45c86c5a5b0f2371603bd24af34b69c22f452b2d2b",
+        "873167cb24b2900ff225ba3464a88ea996567f86963935d0d394c1c7f5a4c266",
+        "e94e71c38f172d3bf57a43a3748ed1054191323e663a4e5d1ee2cdde45302d5f",
+        "7758effe8c2b7c5eb8baa95b7abc73b58a6eb9453747dd779a5b67f48a0a073e"
+      ],
+      "position_after": 1796,
+      "tokens": [
+        7,
+        38,
+        69,
+        100
+      ],
+      "logits_shape": [
+        4,
+        6400
+      ]
+    },
+    {
+      "profile": "B",
+      "library_sha256": "fa02d0b58ec08904b70aaedd24099a578186d921c26058460780094c43c8e1f2",
+      "loading_seconds": 1.1412927000783384,
+      "context_preparation_seconds": 15.58958619995974,
+      "verification_seconds": 0.057921400060877204,
+      "logits_sha256": [
+        "2560f237e25f04de1d7f1a45c86c5a5b0f2371603bd24af34b69c22f452b2d2b",
+        "873167cb24b2900ff225ba3464a88ea996567f86963935d0d394c1c7f5a4c266",
+        "e94e71c38f172d3bf57a43a3748ed1054191323e663a4e5d1ee2cdde45302d5f",
+        "7758effe8c2b7c5eb8baa95b7abc73b58a6eb9453747dd779a5b67f48a0a073e"
+      ],
+      "position_after": 1796,
+      "tokens": [
+        7,
+        38,
+        69,
+        100
+      ],
+      "logits_shape": [
+        4,
+        6400
+      ]
+    }
+  ],
+  "comparison_result": {
+    "logits_parity": true,
+    "tokens_parity": true,
+    "position_parity": true,
+    "parity": true
+  },
+  "status": "PASS"
+}

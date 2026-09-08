@@ -1,0 +1,32 @@
+{
+  "case": {
+    "key": "cpu-e3-verify-x4-1792",
+    "length": 1792
+  },
+  "pairs": 3,
+  "parity": true,
+  "profiles": {
+    "A": {
+      "verification_seconds": 0.08029579999856651
+    },
+    "B": {
+      "verification_seconds": 0.0625422999728471
+    }
+  },
+  "paired": [
+    {
+      "pair": 1,
+      "verification_time_reduction": 0.22110122853295378
+    },
+    {
+      "pair": 2,
+      "verification_time_reduction": 0.41860370122756896
+    },
+    {
+      "pair": 3,
+      "verification_time_reduction": 0.2487243410015254
+    }
+  ],
+  "median_time_reduction": 0.2487243410015254,
+  "favorable_pairs": 3
+}

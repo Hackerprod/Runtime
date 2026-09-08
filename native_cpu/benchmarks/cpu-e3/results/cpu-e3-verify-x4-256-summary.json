@@ -1,0 +1,32 @@
+{
+  "case": {
+    "key": "cpu-e3-verify-x4-256",
+    "length": 256
+  },
+  "pairs": 3,
+  "parity": true,
+  "profiles": {
+    "A": {
+      "verification_seconds": 0.039731800090521574
+    },
+    "B": {
+      "verification_seconds": 0.017457100097090006
+    }
+  },
+  "paired": [
+    {
+      "pair": 1,
+      "verification_time_reduction": 0.281144866064575
+    },
+    {
+      "pair": 2,
+      "verification_time_reduction": 0.7068339501572068
+    },
+    {
+      "pair": 3,
+      "verification_time_reduction": 0.5673264263489012
+    }
+  ],
+  "median_time_reduction": 0.5673264263489012,
+  "favorable_pairs": 3
+}

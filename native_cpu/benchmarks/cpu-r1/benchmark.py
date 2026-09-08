@@ -10,8 +10,8 @@ from native_cpu.tools.native import NativeRuntime
 HISTORICAL_PROMPTS=["Can you help me with programming?","Can you help me with programming?","talk me about how study programming","c#","I like c# languaje","talk me more about languajes please"]
 SECOND_PROMPTS=["Name one benefit of tests.","Define latency briefly."]
 CONVERSATIONS={"historical":HISTORICAL_PROMPTS,"second":SECOND_PROMPTS}
-PROFILES={n:dict(selective_logits=s,reuse_kv=k,threads=1,cpus=[0],row_weights=[1]) for n,s,k in [("R0",False,False),("R1",True,False),("R2",False,True),("R3",True,True)]}
-PROFILES.update(S0=dict(PROFILES["R3"],cpus=None),S1=dict(PROFILES["R3"]),P2=dict(PROFILES["R3"],threads=2,cpus=[0,6],row_weights=[1332,992]),P4=dict(PROFILES["R3"],threads=4,cpus=[0,2,4,6],row_weights=[1]*4))
+PROFILES={n:dict(selective_logits=s,reuse_kv=k,threads=1,cpus=[0],row_weights=[1],v_blocked_attention=False) for n,s,k in [("R0",False,False),("R1",True,False),("R2",False,True),("R3",True,True)]}
+PROFILES.update(S0=dict(PROFILES["R3"],cpus=None),S1=dict(PROFILES["R3"]),P2=dict(PROFILES["R3"],threads=2,cpus=[0,6],row_weights=[1332,992]),P4=dict(PROFILES["R3"],threads=4,cpus=[0,2,4,6],row_weights=[1]*4),V0=dict(PROFILES["R3"]),V1=dict(PROFILES["R3"],v_blocked_attention=True))
 ATTRIBUTION_PAIRS=[("R0","R1"),("R0","R2"),("R0","R3")]
 SCALING_PAIRS=[("S1","S0"),("S1","P2"),("S1","P4")]
 TIMES=("prefill_seconds","native_generation_seconds","sampling_seconds","prompt_prepare_seconds","frontend_other_seconds","generation_seconds","native_seconds","total_seconds")
@@ -62,10 +62,11 @@ def warmup(rt,reps):
     rt.reset();rt.reset_stats()
 
 def effective(rt,cfg,diagnostics,session=None):
-    actual=dict(threads=rt.threads,cpus=rt.cpus,row_weights=rt.row_weights,selective_logits=rt.selective_logits,reuse_kv=session.reuse_kv if session else False,diagnostics=diagnostics)
+    actual=dict(threads=rt.threads,cpus=rt.cpus,row_weights=rt.row_weights,selective_logits=rt.selective_logits,reuse_kv=session.reuse_kv if session else False,v_blocked_attention=getattr(rt,"v_blocked_attention",False),diagnostics=diagnostics)
     assert actual["threads"]==cfg["threads"] and actual["row_weights"]==cfg["row_weights"]
     assert actual["cpus"]==(cfg["cpus"] if cfg["cpus"] is not None else [-1]*cfg["threads"])
     assert actual["selective_logits"]==cfg["selective_logits"]
+    assert actual["v_blocked_attention"]==cfg.get("v_blocked_attention",False)
     if session: assert actual["reuse_kv"]==cfg["reuse_kv"]
     return actual
 
@@ -126,6 +127,10 @@ def make_cases(args):
             for n in args.prefix_lengths: cases.append(dict(key=f"forced-{a}-{b}-{n}",family="forced",left=a,right=b,workload="forced",length=n))
     if args.suite in ("diagnostics","all"):
         for p in ("S1","P2","P4"): cases.append(dict(key=f"diagnostics-{p}",family="diagnostics",left=p+"-off",right=p+"-on",profile=p,workload="diagnostics",length=args.diagnostic_context))
+    if args.suite == "cpu-r2":
+        for n in (256,1792):
+            cases.append(dict(key=f"cpu-r2-speed-V0-V1-{n}",family="cpu-r2-speed",left="V0",right="V1",workload="forced",length=n))
+            cases.append(dict(key=f"cpu-r2-diagnostics-V0-V1-{n}",family="cpu-r2-diagnostics",left="V0",right="V1",workload="forced",length=n,diagnostics=True))
     if args.subset:
         requested=args.subset.split(",")
         cases=[c for c in cases if any(x in (c["key"],c["family"],c["workload"]) for x in requested)]
@@ -133,10 +138,10 @@ def make_cases(args):
     return cases
 
 def run_entry(args,case,active,tokenizer):
-    diagnostics=case["workload"]=="diagnostics" and active.endswith("-on")
+    diagnostics=bool(case.get("diagnostics")) or (case["workload"]=="diagnostics" and active.endswith("-on"))
     cfg=PROFILES[case.get("profile",active)];before=environment()
     with NativeRuntime(args.model,args.library,2048,threads=cfg["threads"],cpus=cfg["cpus"],row_weights=cfg["row_weights"]) as rt:
-        rt.configure_selective_logits(cfg["selective_logits"]);rt.configure_profile(diagnostics);warmup(rt,args.warmups)
+        rt.configure_selective_logits(cfg["selective_logits"]);rt.configure_v_blocked_attention(cfg.get("v_blocked_attention",False));rt.configure_profile(diagnostics);warmup(rt,args.warmups)
         if case["workload"] in CONVERSATIONS:
             maximum=args.max_new_tokens if case["workload"]=="historical" else args.second_max_new_tokens
             data,session=run_conversation(rt,tokenizer,cfg,CONVERSATIONS[case["workload"]],maximum)
@@ -161,7 +166,7 @@ def aggregate(case,pairs):
 def build_parser():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--model",type=Path,default=ROOT/"native_cpu/artifacts/minimind-fp32.bin");p.add_argument("--library",type=Path,default=ROOT/"native_cpu/build/Release/minimind_cpu.dll");p.add_argument("--tokenizer",type=Path,default=ROOT/"checkpoints/minimind-3-hf")
-    p.add_argument("--out",type=Path,required=True);p.add_argument("--suite",choices=("conversation","forced","diagnostics","all"),default="all")
+    p.add_argument("--out",type=Path,required=True);p.add_argument("--suite",choices=("conversation","forced","diagnostics","all","cpu-r2"),default="all")
     p.add_argument("--subset",help="comma-separated exact case, family or workload names")
     p.add_argument("--pairs",type=int,default=6);p.add_argument("--warmups",type=int,default=1);p.add_argument("--max-new-tokens",type=int,default=256);p.add_argument("--second-max-new-tokens",type=int,default=64)
     p.add_argument("--prefix-lengths",default="64,256,1024,1792");p.add_argument("--diagnostic-context",type=int,default=256);p.add_argument("--continuation",type=int,default=32);p.add_argument("--resume",action="store_true")
@@ -169,7 +174,7 @@ def build_parser():
 
 def identity(args):
     import subprocess
-    return dict(schema="cpu-r1/v2",source_commit=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip(),model_sha256=sha(args.model),library_sha256=sha(args.library),tokenizer_sha256={n:sha(args.tokenizer/n) for n in ("tokenizer.json","tokenizer_config.json","chat_template.jinja")},sources_sha256={n:sha(ROOT/n) for n in ("native_cpu/tools/chat.py","native_cpu/tools/native.py","native_cpu/tools/compare_chat.py","native_cpu/benchmarks/cpu-r1/benchmark.py")},python=platform.python_version(),numpy=np.__version__,platform=platform.platform(),config=dict(profiles=PROFILES,conversations=CONVERSATIONS,context=2048,pairs=args.pairs,warmup_prefix=64,warmup_decode=8,warmups=args.warmups,maximum=args.max_new_tokens,second_maximum=args.second_max_new_tokens,prefix_lengths=args.prefix_lengths,diagnostic_context=args.diagnostic_context,continuation=args.continuation,temperature=.9,top_k=50,top_p=.85,seed=0,system=DEFAULT_CHAT_SYSTEM))
+    return dict(schema="cpu-r1/v3",source_commit=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip(),model_sha256=sha(args.model),library_sha256=sha(args.library),tokenizer_sha256={n:sha(args.tokenizer/n) for n in ("tokenizer.json","tokenizer_config.json","chat_template.jinja")},sources_sha256={n:sha(ROOT/n) for n in ("native_cpu/tools/chat.py","native_cpu/tools/native.py","native_cpu/tools/compare_chat.py","native_cpu/benchmarks/cpu-r1/benchmark.py")},python=platform.python_version(),numpy=np.__version__,platform=platform.platform(),config=dict(profiles=PROFILES,conversations=CONVERSATIONS,context=2048,pairs=args.pairs,warmup_prefix=64,warmup_decode=8,warmups=args.warmups,maximum=args.max_new_tokens,second_maximum=args.second_max_new_tokens,prefix_lengths=args.prefix_lengths,diagnostic_context=args.diagnostic_context,continuation=args.continuation,temperature=.9,top_k=50,top_p=.85,seed=0,system=DEFAULT_CHAT_SYSTEM))
 
 def resume_pair(path,meta,case,pair):
     prior=json.loads(path.read_text(encoding="utf8"))

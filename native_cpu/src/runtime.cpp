@@ -306,6 +306,7 @@ struct Runtime {
     MmRuntimeStats stats{};
     bool profile_enabled = false;
     bool selective_logits = false;
+    bool v_blocked_attention = false;
     bool logits_valid = false;
     std::uint64_t cache_epoch = 0;
     Config config;
@@ -510,13 +511,31 @@ struct Runtime {
                     denom += scores[index];
                 }
                 for (uint32_t t = 0; t < total; ++t) scores[static_cast<size_t>(h) * max_context + t] /= denom;
-                for (uint32_t d = 0; d < config.head_dim; ++d) {
-                    float value = 0.0f;
-                    const uint32_t kvh = h / (config.q_heads / config.kv_heads);
-                    for (uint32_t t = 0; t < total; ++t) {
-                        value += scores[static_cast<size_t>(h) * max_context + t] * cache_v[cache_offset(layer, t, kvh, d)];
+                const uint32_t kvh = h / (config.q_heads / config.kv_heads);
+                float* const head_attention = attention.data() + static_cast<size_t>(h) * config.head_dim;
+                if (!v_blocked_attention) {
+                    for (uint32_t d = 0; d < config.head_dim; ++d) {
+                        float value = 0.0f;
+                        for (uint32_t t = 0; t < total; ++t) {
+                            const float product = scores[static_cast<size_t>(h) * max_context + t] * cache_v[cache_offset(layer, t, kvh, d)];
+                            value = value + product;
+                        }
+                        head_attention[d] = value;
                     }
-                    attention[static_cast<size_t>(h) * config.head_dim + d] = value;
+                } else {
+                    constexpr uint32_t block_dims = 16;
+                    for (uint32_t block = 0; block < config.head_dim; block += block_dims) {
+                        const uint32_t end = std::min(block + block_dims, config.head_dim);
+                        for (uint32_t d = block; d < end; ++d) head_attention[d] = 0.0f;
+                        for (uint32_t t = 0; t < total; ++t) {
+                            const float score = scores[static_cast<size_t>(h) * max_context + t];
+                            const float* const value_row = cache_v.data() + cache_offset(layer, t, kvh, block);
+                            for (uint32_t d = block; d < end; ++d) {
+                                const float product = score * value_row[d - block];
+                                head_attention[d] = head_attention[d] + product;
+                            }
+                        }
+                    }
                 }
             }
             if (profile_enabled) {
@@ -683,6 +702,15 @@ MM_RUNTIME_API int mm_configure_selective_logits(void* runtime, int enabled) {
 
 MM_RUNTIME_API int mm_selective_logits(void* runtime) {
     try { return checked_runtime(runtime)->selective_logits ? 1 : 0; } catch (...) { return 0; }
+}
+
+MM_RUNTIME_API int mm_configure_v_blocked_attention(void* runtime, int enabled) {
+    if (enabled != 0 && enabled != 1) return -1;
+    try { checked_runtime(runtime)->v_blocked_attention = enabled != 0; return 0; } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_v_blocked_attention(void* runtime) {
+    try { return checked_runtime(runtime)->v_blocked_attention ? 1 : 0; } catch (...) { return 0; }
 }
 
 MM_RUNTIME_API int mm_configure_threads(void* runtime, uint32_t threads,

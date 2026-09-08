@@ -72,3 +72,25 @@ def test_aggregate_ba_order_still_orients_deltas_by_profile():
  rec={"pair":2,"order":["P2","S1"],"entries":[e("P2",8),e("S1",10)],"comparison_result":{"parity":True}}
  out=benchmark.aggregate(case,[rec])
  assert out["paired_differences"][0]["right_minus_left"]["total_seconds"]==-2
+
+
+def test_cpu_r2_case_matrix_is_bounded_to_requested_prefixes():
+ class A: suite="cpu-r2";subset=None;prefix_lengths=[64,256,1024,1792];diagnostic_context=256
+ cases=benchmark.make_cases(A())
+ assert [c["key"] for c in cases]==[
+  "cpu-r2-speed-V0-V1-256",
+  "cpu-r2-diagnostics-V0-V1-256",
+  "cpu-r2-speed-V0-V1-1792",
+  "cpu-r2-diagnostics-V0-V1-1792",
+ ]
+ assert all(c["left"]=="V0" and c["right"]=="V1" and c["workload"]=="forced" for c in cases)
+ assert [bool(c.get("diagnostics")) for c in cases]==[False, True, False, True]
+ assert benchmark.PROFILES["V0"]["selective_logits"] and benchmark.PROFILES["V0"]["reuse_kv"]
+ assert benchmark.PROFILES["V0"]["cpus"]==[0] and benchmark.PROFILES["V0"]["threads"]==1
+ assert benchmark.PROFILES["V1"]["v_blocked_attention"] is True
+
+def test_effective_configuration_checks_v_blocked_attention():
+ class Runtime:
+  threads=1;cpus=[0];row_weights=[1];selective_logits=True;v_blocked_attention=False
+ cfg={"threads":1,"cpus":[0],"row_weights":[1],"selective_logits":True,"reuse_kv":True,"v_blocked_attention":True}
+ with pytest.raises(AssertionError): benchmark.effective(Runtime(),cfg,False)

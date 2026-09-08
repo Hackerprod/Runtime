@@ -82,6 +82,8 @@ class NativeRuntime:
         self._configure_selective = getattr(lib, "mm_configure_selective_logits", None)
         self._query_selective = getattr(lib, "mm_selective_logits", None)
         self._truncate = getattr(lib, "mm_truncate", None)
+        self._configure_v_blocked_attention = getattr(lib, "mm_configure_v_blocked_attention", None)
+        self._query_v_blocked_attention = getattr(lib, "mm_v_blocked_attention", None)
         self._query_logits_valid = getattr(lib, "mm_logits_valid", None)
         self._query_epoch = getattr(lib, "mm_cache_epoch", None)
         if self._configure_selective is not None:
@@ -90,6 +92,10 @@ class NativeRuntime:
             self._query_selective.argtypes = [ctypes.c_void_p]; self._query_selective.restype = ctypes.c_int
         if self._truncate is not None:
             self._truncate.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_size_t]; self._truncate.restype = ctypes.c_int
+        if self._configure_v_blocked_attention is not None:
+            self._configure_v_blocked_attention.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_v_blocked_attention.restype = ctypes.c_int
+        if self._query_v_blocked_attention is not None:
+            self._query_v_blocked_attention.argtypes = [ctypes.c_void_p]; self._query_v_blocked_attention.restype = ctypes.c_int
         if self._query_logits_valid is not None:
             self._query_logits_valid.argtypes = [ctypes.c_void_p]; self._query_logits_valid.restype = ctypes.c_int
         if self._query_epoch is not None:
@@ -213,6 +219,19 @@ class NativeRuntime:
         self._check()
         if self._query_selective is None: return False
         return bool(self._query_selective(self._handle))
+
+    def configure_v_blocked_attention(self, enabled=True):
+        self._check()
+        if self._configure_v_blocked_attention is None:
+            if not enabled: return
+            raise NativeError("native runtime does not support V-blocked attention")
+        if int(self._configure_v_blocked_attention(self._handle, int(bool(enabled)))) != 0: raise NativeError("mm_configure_v_blocked_attention failed")
+
+    @property
+    def v_blocked_attention(self):
+        self._check()
+        if self._query_v_blocked_attention is None: return False
+        return bool(self._query_v_blocked_attention(self._handle))
 
     def configure_profile(self, enabled=True):
         self._check()

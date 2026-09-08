@@ -1,0 +1,9 @@
+command=python native_cpu/benchmarks/cpu-u1.1/benchmark.py --out native_cpu/benchmarks/cpu-u1.1/results --pairs 3
+exit_code=1
+Traceback (most recent call last):
+  File "D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\benchmarks\cpu-u1.1\benchmark.py", line 252, in <module>
+    main()
+    ~~~~^^
+  File "D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\benchmarks\cpu-u1.1\benchmark.py", line 208, in main
+    raise RuntimeError(f"CPU-U1.1 refuses reference DLL: expected SHA-256 {EXPECTED_REFERENCE_SHA256}, found {reference_sha}")
+RuntimeError: CPU-U1.1 refuses reference DLL: expected SHA-256 4d598dd21493d2821a10783c4c97671c96ea038b98c3cc82c30172182fdb3672, found 5261fef560537f48bc215890a14288edef2f5c78bda50e7a87cb2cb88fe0daeb

@@ -1,0 +1,199 @@
+{
+  "identity": {
+    "schema": "cpu-c1/paired-v1",
+    "candidate_runtime_commit": "ae90d82e6007574628d496eba898cdffce2b8096",
+    "reference_runtime_commit": "a6d06a949cb514741f100e439e283d2189685102",
+    "measurement_tree_commit": "952e0146d80f31e25dd844c52aaa10b4c83bd387",
+    "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+    "tokenizer_sha256": {
+      "tokenizer.json": "71f32c68cf63a15355a8fc171b7594b3d41870fe0ddb54fc6aefa55f73a4a668",
+      "tokenizer_config.json": "04ae7620b9cf93fd2d6fbf94936b0c3c4be65f30cd6ef6fa8741baac986525d1",
+      "chat_template.jinja": "97c6a9ef3f8d35044f435bb7773f1af160a7328ab6e8d2e9d67702941320a711"
+    },
+    "reference_library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\validation\\cpu-r1\\frozen\\minimind_cpu.dll",
+    "reference_library_sha256": "4f9ed66fd43d0850f7d2ec17679df1b85754c665ba5c3393b1e71f7f7658c1bd",
+    "reference_identity_sha256": "26c13d93f353d807719cbac475c22f740ea0d2d2004f6d61502d130818276f8f",
+    "candidate_library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\minimind_cpu.dll",
+    "candidate_library_sha256": "4d598dd21493d2821a10783c4c97671c96ea038b98c3cc82c30172182fdb3672",
+    "candidate_build_info_sha256": "4f143c4a0f5ee7fed168153339679e9e675e77982c11311b31a8c5f286f5dbb8",
+    "policy": {
+      "temperature": 0.9,
+      "top_k": 50,
+      "top_p": 0.85,
+      "seed": 0,
+      "system": "official MiniMind chat system"
+    },
+    "threads": 1,
+    "cpus": [
+      0
+    ],
+    "profiler": false,
+    "candidate_options": {
+      "selective_logits": true,
+      "reuse_kv": true,
+      "v_blocked_attention": true,
+      "gqa_k_shared": true,
+      "gqa_v_shared": true,
+      "ffn_f16_storage": true,
+      "ffn_row4": false
+    },
+    "reference_options": {
+      "native_defaults": true,
+      "selective_logits": false,
+      "reuse_kv": false,
+      "v_blocked_attention": false,
+      "gqa_k_shared": false,
+      "gqa_v_shared": false,
+      "ffn_f16_storage": false,
+      "ffn_row4": false
+    },
+    "pair_count": 6,
+    "prefix_lengths": [
+      256,
+      1792
+    ],
+    "continuation": 32
+  },
+  "cases": [
+    {
+      "case": {
+        "key": "cpu-c1-conversation-historical",
+        "workload": "historical"
+      },
+      "pairs": 6,
+      "parity": true,
+      "orders": [
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ],
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ],
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ]
+      ]
+    },
+    {
+      "case": {
+        "key": "cpu-c1-conversation-second",
+        "workload": "second"
+      },
+      "pairs": 6,
+      "parity": true,
+      "orders": [
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ],
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ],
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ]
+      ]
+    },
+    {
+      "case": {
+        "key": "cpu-c1-forced-256",
+        "workload": "forced",
+        "length": 256
+      },
+      "pairs": 6,
+      "parity": true,
+      "orders": [
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ],
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ],
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ]
+      ]
+    },
+    {
+      "case": {
+        "key": "cpu-c1-forced-1792",
+        "workload": "forced",
+        "length": 1792
+      },
+      "pairs": 6,
+      "parity": true,
+      "orders": [
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ],
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ],
+        [
+          "A",
+          "B"
+        ],
+        [
+          "B",
+          "A"
+        ]
+      ]
+    }
+  ],
+  "status": "PASS",
+  "final_protocol": true
+}

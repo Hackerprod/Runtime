@@ -1,0 +1,34 @@
+{
+  "case": {
+    "key": "cpu-c1-conversation-historical",
+    "workload": "historical"
+  },
+  "pairs": 6,
+  "parity": true,
+  "orders": [
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ]
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "experiment": "CPU-C1 accumulated original-to-CPU-R6 comparison",
+  "status": "PASS",
+  "reference_runtime_commit": "a6d06a949cb514741f100e439e283d2189685102",
+  "candidate_runtime_commit": "ae90d82e6007574628d496eba898cdffce2b8096",
+  "measurement_tree_commit": "952e0146d80f31e25dd844c52aaa10b4c83bd387",
+  "reference_library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\validation\\cpu-r1\\frozen\\minimind_cpu.dll",
+  "reference_library_sha256": "4f9ed66fd43d0850f7d2ec17679df1b85754c665ba5c3393b1e71f7f7658c1bd",
+  "candidate_library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\minimind_cpu.dll",
+  "candidate_library_sha256": "4d598dd21493d2821a10783c4c97671c96ea038b98c3cc82c30172182fdb3672",
+  "model": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\artifacts\\minimind-fp32.bin",
+  "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+  "tokenizer_sha256": {
+    "tokenizer.json": "71f32c68cf63a15355a8fc171b7594b3d41870fe0ddb54fc6aefa55f73a4a668",
+    "tokenizer_config.json": "04ae7620b9cf93fd2d6fbf94936b0c3c4be65f30cd6ef6fa8741baac986525d1",
+    "chat_template.jinja": "97c6a9ef3f8d35044f435bb7773f1af160a7328ab6e8d2e9d67702941320a711"
+  },
+  "sources_sha256": {
+    "benchmark.py": "91756040d832e80e260278b55b5a691d0c794c94a5b34da512602117da0df304",
+    "summarize.py": "5420e8114b77cbcd1af12c131c5642e49d4c0c572af98804e7dadb90c03ac0e9"
+  },
+  "configuration": {
+    "reference": "frozen pre-CPU-R1 behavior; native defaults",
+    "candidate": "CPU-R6 cumulative: selective-logits, reuse-kv, v-blocked-attention, gqa-k-shared, gqa-v-shared, ffn-f16-storage enabled; ffn-row4 disabled",
+    "threads": 1,
+    "cpus": [
+      0
+    ],
+    "row_weights": [
+      1
+    ],
+    "profiler": false,
+    "temperature": 0.9,
+    "top_k": 50,
+    "top_p": 0.85,
+    "seed": 0,
+    "context_limit": 2048,
+    "prefix_lengths": [
+      256,
+      1792
+    ],
+    "continuation": 32,
+    "conversation_cases": [
+      "historical",
+      "second"
+    ],
+    "pairs_per_case": 6,
+    "orders": "alternating A/B then B/A",
+    "loading_and_storage_preparation_excluded_from_inference": true,
+    "diagnostic_counters": "not required; missing legacy fields are unavailable, not zero"
+  },
+  "receipts": {
+    "case_count": 4,
+    "pair_count": 24,
+    "raw_directory": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\benchmarks\\cpu-c1\\results",
+    "report": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\benchmarks\\cpu-c1\\RESULTS.md"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "case": {
+    "key": "cpu-c1-forced-256",
+    "workload": "forced",
+    "length": 256
+  },
+  "pairs": 6,
+  "parity": true,
+  "orders": [
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ]
+  ]
+}

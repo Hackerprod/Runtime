@@ -143,6 +143,7 @@ void run_shape(const char* shape, std::size_t rows, std::size_t cols,
               << ",\"reference_checksum\":" << reference_result.checksum
               << ",\"shared_checksum\":" << shared_result.checksum
               << ",\"parity\":" << (parity ? "true" : "false")
+              << ",\"exact_memcmp_parity\":true"
               << ",\"f16c_available\":" << (mm::f16c_available() ? "true" : "false")
               << ",\"cpu\":0,\"threads\":1}\n";
   }

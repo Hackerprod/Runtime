@@ -40,7 +40,7 @@ Windows group-0 logical CPUs `0,6`, and contiguous row weights `1332:992`:
 ```
 
 The CPU-R3 four-row FFN GEMV is available as an explicit experiment; it keeps
-the same CPU-R1/CPU-R2 settings and changes only the FP32 gate/up/down
+the same CPU-R1/CPU-R2 algorithm settings and changes only the FP32 gate/up/down
 projections:
 
 ```powershell

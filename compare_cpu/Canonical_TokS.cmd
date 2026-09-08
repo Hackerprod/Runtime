@@ -14,7 +14,16 @@ set "PYTHONIOENCODING=utf-8"
 set "HF_HUB_OFFLINE=1"
 set "TRANSFORMERS_OFFLINE=1"
 pushd "%~dp0.." || goto :missing_repo
-"%PY%" compare_cpu\canonical_tok_s.py
+if defined CANONICAL_LIBRARY (
+    if not defined CANONICAL_EXPECTED_SHA256 goto :missing_canonical_hash
+    if defined CANONICAL_RESULTS (
+        "%PY%" compare_cpu\canonical_tok_s.py --library "%CANONICAL_LIBRARY%" --expected-sha256 "%CANONICAL_EXPECTED_SHA256%" --results "%CANONICAL_RESULTS%"
+    ) else (
+        "%PY%" compare_cpu\canonical_tok_s.py --library "%CANONICAL_LIBRARY%" --expected-sha256 "%CANONICAL_EXPECTED_SHA256%"
+    )
+) else (
+    "%PY%" compare_cpu\canonical_tok_s.py
+)
 set "RC=%ERRORLEVEL%"
 popd
 if not "%MINIMIND_NO_PAUSE%"=="1" pause
@@ -26,4 +35,8 @@ endlocal & exit /b 1
 
 :missing_repo
 echo Could not open the MiniMind repository. 1>&2
+endlocal & exit /b 1
+
+:missing_canonical_hash
+echo CANONICAL_EXPECTED_SHA256 is required when CANONICAL_LIBRARY is set. 1>&2
 endlocal & exit /b 1

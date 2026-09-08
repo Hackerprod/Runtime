@@ -335,11 +335,13 @@ struct Runtime {
     std::uint64_t attention_v_ns = 0;
     std::uint64_t gqa_v_shared_fallbacks = 0;
     std::uint64_t ffn_f16_prepare_ns = 0;
+    std::uint64_t attention_f16_prepare_ns = 0;
     bool profile_enabled = false;
     bool selective_logits = false;
     bool v_blocked_attention = false;
     bool ffn_row4 = false;
     bool ffn_f16_storage = false;
+    bool attention_f16_storage = false;
     bool gqa_k_shared = false;
     bool gqa_v_shared = false;
     bool logits_valid = false;
@@ -362,15 +364,8 @@ struct Runtime {
     std::array<PrefillState, 4> prefill_states;
     bool prefill_x4_ready = false;
 
-    bool prepare_ffn_f16_storage() {
+    bool prepare_f16_storage(const std::vector<const Tensor*>& compact) {
         if (!mm::f16c_available()) return false;
-        std::vector<const Tensor*> compact;
-        compact.reserve(static_cast<size_t>(config.layers) * 3);
-        for (const LayerWeights& layer : layers) {
-            compact.push_back(layer.gate_proj);
-            compact.push_back(layer.up_proj);
-            compact.push_back(layer.down_proj);
-        }
         for (const Tensor* weight : compact) {
             if (weight == nullptr || weight->dtype != 0) {
                 for (const Tensor* item : compact) if (item != nullptr) item->f16.clear();
@@ -395,6 +390,37 @@ struct Runtime {
         return true;
     }
 
+    std::vector<const Tensor*> ffn_f16_weights() const {
+        std::vector<const Tensor*> compact;
+        compact.reserve(static_cast<size_t>(config.layers) * 3);
+        for (const LayerWeights& layer : layers) {
+            compact.push_back(layer.gate_proj);
+            compact.push_back(layer.up_proj);
+            compact.push_back(layer.down_proj);
+        }
+        return compact;
+    }
+
+    std::vector<const Tensor*> attention_f16_weights() const {
+        std::vector<const Tensor*> compact;
+        compact.reserve(static_cast<size_t>(config.layers) * 4);
+        for (const LayerWeights& layer : layers) {
+            compact.push_back(layer.q_proj);
+            compact.push_back(layer.k_proj);
+            compact.push_back(layer.v_proj);
+            compact.push_back(layer.o_proj);
+        }
+        return compact;
+    }
+
+    bool prepare_ffn_f16_storage() {
+        return prepare_f16_storage(ffn_f16_weights());
+    }
+
+    bool prepare_attention_f16_storage() {
+        return prepare_f16_storage(attention_f16_weights());
+    }
+
     bool is_production_model() const {
         // The consolidated route is intentionally tied to the validated MiniMind
         // checkpoint shape. Synthetic fixtures and alternate model layouts retain
@@ -410,6 +436,17 @@ struct Runtime {
             if (layer.gate_proj != nullptr) values += layer.gate_proj->f16.size();
             if (layer.up_proj != nullptr) values += layer.up_proj->f16.size();
             if (layer.down_proj != nullptr) values += layer.down_proj->f16.size();
+        }
+        return values * sizeof(std::uint16_t);
+    }
+
+    std::uint64_t attention_f16_storage_bytes() const {
+        std::uint64_t values = 0;
+        for (const LayerWeights& layer : layers) {
+            if (layer.q_proj != nullptr) values += layer.q_proj->f16.size();
+            if (layer.k_proj != nullptr) values += layer.k_proj->f16.size();
+            if (layer.v_proj != nullptr) values += layer.v_proj->f16.size();
+            if (layer.o_proj != nullptr) values += layer.o_proj->f16.size();
         }
         return values * sizeof(std::uint16_t);
     }
@@ -481,6 +518,13 @@ struct Runtime {
             ffn_f16_prepare_ns = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - started).count());
             ffn_f16_storage = true;
+            const auto attention_started = std::chrono::steady_clock::now();
+            if (!prepare_attention_f16_storage()) {
+                throw std::runtime_error("CPU-E6 production route requires exact FP16 attention storage and F16C");
+            }
+            attention_f16_prepare_ns = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - attention_started).count());
+            attention_f16_storage = true;
             for (PrefillState& state : prefill_states) state.resize(config, max_context);
             prefill_x4_ready = true;
         }
@@ -517,7 +561,12 @@ struct Runtime {
         const uint32_t rows = static_cast<uint32_t>(weight.rows());
         const uint32_t cols = static_cast<uint32_t>(weight.cols());
         const auto started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-        if (weight.dtype == 0 && use_ffn_f16 && ffn_f16_storage && weight.f16.size() == weight.f32.size()) parallel.gemv_f16(weight.f16.data(), input, output, rows, cols, kernel_mode);
+        const bool attention_op = op == ProfileOp::Qkv || op == ProfileOp::Output;
+        const bool use_compact = weight.dtype == 0 && use_ffn_f16 &&
+            ((attention_op && attention_f16_storage) ||
+             (!attention_op && ffn_f16_storage)) &&
+            weight.f16.size() == weight.f32.size();
+        if (use_compact) parallel.gemv_f16(weight.f16.data(), input, output, rows, cols, kernel_mode);
         else if (weight.dtype == 0 && use_ffn_row4 && ffn_row4) parallel.gemv_f32_row4(weight.f32.data(), input, output, rows, cols, kernel_mode);
         else if (weight.dtype == 0) parallel.gemv_f32(weight.f32.data(), input, output, rows, cols, kernel_mode);
         else parallel.gemv_q4(weight.q4.data(), weight.scales.data(), input, output, rows, cols, kernel_mode);
@@ -581,33 +630,45 @@ struct Runtime {
                  const float* x0, float* y0,
                  const float* x1, float* y1,
                  const float* x2, float* y2,
-                 const float* x3, float* y3) {
+                 const float* x3, float* y3,
+                 ProfileOp op = ProfileOp::Ffn) {
         const uint32_t rows = static_cast<uint32_t>(weight.rows());
         const uint32_t cols = static_cast<uint32_t>(weight.cols());
-        if (!(weight.dtype == 0 && ffn_f16_storage && weight.f16.size() == weight.f32.size())) {
-            gemv(weight, x0, y0, ProfileOp::Ffn, true, true);
-            gemv(weight, x1, y1, ProfileOp::Ffn, true, true);
-            gemv(weight, x2, y2, ProfileOp::Ffn, true, true);
-            gemv(weight, x3, y3, ProfileOp::Ffn, true, true);
+        const bool attention_op = op == ProfileOp::Qkv || op == ProfileOp::Output;
+        const bool use_compact = weight.dtype == 0 &&
+            ((attention_op && attention_f16_storage) ||
+             (!attention_op && ffn_f16_storage)) &&
+            weight.f16.size() == weight.f32.size();
+        if (!use_compact) {
+            const bool use_row4 = op == ProfileOp::Ffn;
+            gemv(weight, x0, y0, op, use_row4, true);
+            gemv(weight, x1, y1, op, use_row4, true);
+            gemv(weight, x2, y2, op, use_row4, true);
+            gemv(weight, x3, y3, op, use_row4, true);
             return;
         }
         const auto started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         parallel.gemv_f16_x4(weight.f16.data(), x0, y0, x1, y1, x2, y2, x3, y3,
                              rows, cols, kernel_mode);
         if (profile_enabled) {
-            stats.ffn_calls += 4;
-            stats.ffn_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            const auto ns = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - started).count());
+            switch (op) {
+            case ProfileOp::Qkv: stats.qkv_calls += 4; stats.qkv_ns += ns; break;
+            case ProfileOp::Output: stats.output_projection_calls += 4; stats.output_projection_ns += ns; break;
+            case ProfileOp::Ffn: stats.ffn_calls += 4; stats.ffn_ns += ns; break;
+            default: stats.remaining_ops_calls += 4; stats.remaining_ops_ns += ns; break;
+            }
         }
     }
 
-    void process_prefill_attention(PrefillState& state, const LayerWeights& w,
-                                   uint32_t layer, uint32_t pos, bool emit_logits) {
+    void prepare_prefill_input(PrefillState& state, const LayerWeights& w) {
         std::copy(state.hidden.begin(), state.hidden.end(), state.residual.begin());
         rms_norm(state.hidden, *w.input_norm, config.rms_eps, state.normed);
-        gemv(*w.q_proj, state.normed.data(), state.q.data(), ProfileOp::Qkv);
-        gemv(*w.k_proj, state.normed.data(), state.k.data(), ProfileOp::Qkv);
-        gemv(*w.v_proj, state.normed.data(), state.v.data(), ProfileOp::Qkv);
+    }
+
+    void finish_prefill_attention(PrefillState& state, const LayerWeights& w,
+                                  uint32_t layer, uint32_t pos, bool emit_logits) {
         for (uint32_t h = 0; h < config.q_heads; ++h) {
             const size_t base = static_cast<size_t>(h) * config.head_dim;
             rms_norm_ptr(state.q.data() + base, *w.q_norm, config.head_dim,
@@ -758,9 +819,22 @@ struct Runtime {
             stats.attention_kv_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - attention_started).count());
             ++stats.attention_kv_calls;
         }
-        gemv(*w.o_proj, state.attention.data(), state.projection.data(), ProfileOp::Output);
+    }
+
+    void finish_prefill_output(PrefillState& state, const LayerWeights& w) {
+        gemv(*w.o_proj, state.attention.data(), state.projection.data(), ProfileOp::Output, false, true);
         for (uint32_t d = 0; d < config.hidden; ++d) state.hidden[d] = state.residual[d] + state.projection[d];
         rms_norm(state.hidden, *w.post_attention_norm, config.rms_eps, state.normed);
+    }
+
+    void process_prefill_attention(PrefillState& state, const LayerWeights& w,
+                                   uint32_t layer, uint32_t pos, bool emit_logits) {
+        prepare_prefill_input(state, w);
+        gemv(*w.q_proj, state.normed.data(), state.q.data(), ProfileOp::Qkv, false, true);
+        gemv(*w.k_proj, state.normed.data(), state.k.data(), ProfileOp::Qkv, false, true);
+        gemv(*w.v_proj, state.normed.data(), state.v.data(), ProfileOp::Qkv, false, true);
+        finish_prefill_attention(state, w, layer, pos, emit_logits);
+        finish_prefill_output(state, w);
     }
 
     void finish_prefill_ffn(PrefillState& state, const LayerWeights& w) {
@@ -814,9 +888,37 @@ struct Runtime {
             const LayerWeights& w = layers[layer];
             if (profile_enabled) stats.remaining_ops_calls += 4;
             for (size_t lane = 0; lane < 4; ++lane) {
+                prepare_prefill_input(prefill_states[lane], w);
+            }
+            gemv_x4(*w.q_proj, prefill_states[0].normed.data(), prefill_states[0].q.data(),
+                    prefill_states[1].normed.data(), prefill_states[1].q.data(),
+                    prefill_states[2].normed.data(), prefill_states[2].q.data(),
+                    prefill_states[3].normed.data(), prefill_states[3].q.data(),
+                    ProfileOp::Qkv);
+            gemv_x4(*w.k_proj, prefill_states[0].normed.data(), prefill_states[0].k.data(),
+                    prefill_states[1].normed.data(), prefill_states[1].k.data(),
+                    prefill_states[2].normed.data(), prefill_states[2].k.data(),
+                    prefill_states[3].normed.data(), prefill_states[3].k.data(),
+                    ProfileOp::Qkv);
+            gemv_x4(*w.v_proj, prefill_states[0].normed.data(), prefill_states[0].v.data(),
+                    prefill_states[1].normed.data(), prefill_states[1].v.data(),
+                    prefill_states[2].normed.data(), prefill_states[2].v.data(),
+                    prefill_states[3].normed.data(), prefill_states[3].v.data(),
+                    ProfileOp::Qkv);
+            for (size_t lane = 0; lane < 4; ++lane) {
                 const bool emit = emit_all || !selective_logits || (emit_last && lane == 3);
-                process_prefill_attention(prefill_states[lane], w, layer,
-                                          base_position + static_cast<uint32_t>(lane), emit);
+                finish_prefill_attention(prefill_states[lane], w, layer,
+                                         base_position + static_cast<uint32_t>(lane), emit);
+            }
+            gemv_x4(*w.o_proj, prefill_states[0].attention.data(), prefill_states[0].projection.data(),
+                    prefill_states[1].attention.data(), prefill_states[1].projection.data(),
+                    prefill_states[2].attention.data(), prefill_states[2].projection.data(),
+                    prefill_states[3].attention.data(), prefill_states[3].projection.data(),
+                    ProfileOp::Output);
+            for (size_t lane = 0; lane < 4; ++lane) {
+                PrefillState& state = prefill_states[lane];
+                for (uint32_t d = 0; d < config.hidden; ++d) state.hidden[d] = state.residual[d] + state.projection[d];
+                rms_norm(state.hidden, *w.post_attention_norm, config.rms_eps, state.normed);
             }
             finish_prefill_ffn_x4(prefill_states[0], prefill_states[1], prefill_states[2], prefill_states[3], w);
         }
@@ -850,9 +952,9 @@ struct Runtime {
             if (profile_enabled) ++stats.remaining_ops_calls;
             std::copy(hidden.begin(), hidden.end(), residual.begin());
             rms_norm(hidden, *w.input_norm, config.rms_eps, normed);
-            gemv(*w.q_proj, normed.data(), q.data(), ProfileOp::Qkv);
-            gemv(*w.k_proj, normed.data(), k.data(), ProfileOp::Qkv);
-            gemv(*w.v_proj, normed.data(), v.data(), ProfileOp::Qkv);
+            gemv(*w.q_proj, normed.data(), q.data(), ProfileOp::Qkv, false, true);
+            gemv(*w.k_proj, normed.data(), k.data(), ProfileOp::Qkv, false, true);
+            gemv(*w.v_proj, normed.data(), v.data(), ProfileOp::Qkv, false, true);
             for (uint32_t h = 0; h < config.q_heads; ++h) {
                 const size_t base = static_cast<size_t>(h) * config.head_dim;
                 rms_norm_ptr(q.data() + base, *w.q_norm, config.head_dim,
@@ -1017,7 +1119,7 @@ struct Runtime {
                 stats.attention_kv_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - attention_started).count());
                 ++stats.attention_kv_calls;
             }
-            gemv(*w.o_proj, attention.data(), projection.data(), ProfileOp::Output);
+            gemv(*w.o_proj, attention.data(), projection.data(), ProfileOp::Output, false, true);
             for (uint32_t d = 0; d < config.hidden; ++d) hidden[d] = residual[d] + projection[d];
             rms_norm(hidden, *w.post_attention_norm, config.rms_eps, normed);
             gemv(*w.gate_proj, normed.data(), intermediate.data(), ProfileOp::Ffn, true, true);
@@ -1277,6 +1379,28 @@ MM_RUNTIME_API int mm_get_ffn_f16_prepare_ns(void* runtime, uint64_t* out_ns) {
         Runtime* model = checked_runtime(runtime);
         if (out_ns == nullptr) return -1;
         *out_ns = model->ffn_f16_prepare_ns;
+        return 0;
+    } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_attention_f16_storage(void* runtime) {
+    try { return checked_runtime(runtime)->attention_f16_storage ? 1 : 0; } catch (...) { return 0; }
+}
+
+MM_RUNTIME_API int mm_get_attention_f16_storage_bytes(void* runtime, uint64_t* out_bytes) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (out_bytes == nullptr) return -1;
+        *out_bytes = model->attention_f16_storage_bytes();
+        return 0;
+    } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_get_attention_f16_prepare_ns(void* runtime, uint64_t* out_ns) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (out_ns == nullptr) return -1;
+        *out_ns = model->attention_f16_prepare_ns;
         return 0;
     } catch (...) { return -1; }
 }

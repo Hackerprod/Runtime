@@ -94,6 +94,9 @@ class NativeRuntime:
         self._query_ffn_f16_storage = getattr(lib, "mm_ffn_f16_storage", None)
         self._query_ffn_f16_storage_bytes = getattr(lib, "mm_get_ffn_f16_storage_bytes", None)
         self._query_ffn_f16_prepare_ns = getattr(lib, "mm_get_ffn_f16_prepare_ns", None)
+        self._query_attention_f16_storage = getattr(lib, "mm_attention_f16_storage", None)
+        self._query_attention_f16_storage_bytes = getattr(lib, "mm_get_attention_f16_storage_bytes", None)
+        self._query_attention_f16_prepare_ns = getattr(lib, "mm_get_attention_f16_prepare_ns", None)
         self._query_f16c_available = getattr(lib, "mm_f16c_available", None)
         self._configure_gqa_k_shared = getattr(lib, "mm_configure_gqa_k_shared", None)
         self._query_gqa_k_shared = getattr(lib, "mm_gqa_k_shared", None)
@@ -125,6 +128,14 @@ class NativeRuntime:
         if self._query_ffn_f16_prepare_ns is not None:
             self._query_ffn_f16_prepare_ns.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64)]
             self._query_ffn_f16_prepare_ns.restype = ctypes.c_int
+        if self._query_attention_f16_storage is not None:
+            self._query_attention_f16_storage.argtypes = [ctypes.c_void_p]; self._query_attention_f16_storage.restype = ctypes.c_int
+        if self._query_attention_f16_storage_bytes is not None:
+            self._query_attention_f16_storage_bytes.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64)]
+            self._query_attention_f16_storage_bytes.restype = ctypes.c_int
+        if self._query_attention_f16_prepare_ns is not None:
+            self._query_attention_f16_prepare_ns.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64)]
+            self._query_attention_f16_prepare_ns.restype = ctypes.c_int
         if self._query_f16c_available is not None:
             self._query_f16c_available.argtypes = []; self._query_f16c_available.restype = ctypes.c_int
         if self._configure_gqa_k_shared is not None:
@@ -346,6 +357,28 @@ class NativeRuntime:
         if self._query_ffn_f16_prepare_ns is None: return None
         value = ctypes.c_uint64()
         if int(self._query_ffn_f16_prepare_ns(self._handle, ctypes.byref(value))) != 0: return None
+        return int(value.value)
+
+    @property
+    def attention_f16_storage(self):
+        self._check()
+        if self._query_attention_f16_storage is None: return False
+        return bool(self._query_attention_f16_storage(self._handle))
+
+    @property
+    def attention_f16_storage_bytes(self):
+        self._check()
+        if self._query_attention_f16_storage_bytes is None: return None
+        value = ctypes.c_uint64()
+        if int(self._query_attention_f16_storage_bytes(self._handle, ctypes.byref(value))) != 0: return None
+        return int(value.value)
+
+    @property
+    def attention_f16_prepare_ns(self):
+        self._check()
+        if self._query_attention_f16_prepare_ns is None: return None
+        value = ctypes.c_uint64()
+        if int(self._query_attention_f16_prepare_ns(self._handle, ctypes.byref(value))) != 0: return None
         return int(value.value)
 
     @property

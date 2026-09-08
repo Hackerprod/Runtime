@@ -958,6 +958,23 @@ void test_ffn_f16_storage_contract() {
     std::filesystem::remove(q4_path);
 }
 
+void test_attention_f16_storage_contract() {
+    assert(mm_attention_f16_storage(nullptr) == 0);
+    assert(mm_get_attention_f16_storage_bytes(nullptr, nullptr) == -1);
+    assert(mm_get_attention_f16_prepare_ns(nullptr, nullptr) == -1);
+    const auto path = write_file(threading_fixture(false), ".attention-f16");
+    {
+        ScopedRuntime candidate(path, 0);
+        uint64_t compact_bytes = 123, prepare_ns = 123;
+        assert(mm_attention_f16_storage(candidate.value) == 0);
+        assert(mm_get_attention_f16_storage_bytes(candidate.value, &compact_bytes) == 0);
+        assert(compact_bytes == 0);
+        assert(mm_get_attention_f16_prepare_ns(candidate.value, &prepare_ns) == 0);
+        assert(prepare_ns == 0);
+    }
+    std::filesystem::remove(path);
+}
+
 void test_truncate_contract() {
     const auto path = write_file(threading_fixture(false), ".truncate");
     const std::vector<int32_t> prefix = {1, 4, 7, 2, 9, 3, 5, 6};
@@ -1042,6 +1059,7 @@ int main() {
     test_gqa_v_shared_contract();
     test_ffn_row4_contract();
     test_ffn_f16_storage_contract();
+    test_attention_f16_storage_contract();
     test_truncate_contract();
     test_cache_reset_and_overflow();
     test_crc_and_truncation();

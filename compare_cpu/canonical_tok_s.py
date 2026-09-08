@@ -38,11 +38,11 @@ def _metric_rate(metrics: dict, numerator: str) -> float | None:
     return count / seconds if count and seconds > 0.0 else None
 
 
-def run_once(index: int) -> tuple[dict, str]:
+def run_once(index: int, dll: Path, results: Path) -> tuple[dict, str]:
     command = [
         sys.executable, "-m", "native_cpu.tools.compare_chat",
         "--backend", "native", "--profile", "chat", "--prompt", PROMPT,
-        "--model", str(MODEL), "--library", str(DLL),
+        "--model", str(MODEL), "--library", str(dll),
         "--checkpoint-dir", str(CHECKPOINT), "--context-limit", "2048",
         "--max-new-tokens", "256", "--temperature", "0.9", "--top-k", "50",
         "--top-p", "0.85", "--seed", "0", "--threads", "1", "--cpus", "0",
@@ -67,10 +67,10 @@ def run_once(index: int) -> tuple[dict, str]:
         raise RuntimeError(f"canonical run {index} returned invalid JSON: {lines[-1]!r}") from exc
     if not isinstance(metrics, dict):
         raise RuntimeError(f"canonical run {index} returned a non-object result")
-    RESULTS.mkdir(parents=True, exist_ok=True)
-    (RESULTS / f"run-{index:02d}.json").write_text(
+    results.mkdir(parents=True, exist_ok=True)
+    (results / f"run-{index:02d}.json").write_text(
         json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (RESULTS / f"run-{index:02d}.stderr.log").write_text(completed.stderr, encoding="utf-8")
+    (results / f"run-{index:02d}.stderr.log").write_text(completed.stderr, encoding="utf-8")
     return metrics, completed.stderr
 
 
@@ -78,13 +78,21 @@ def _fmt(values: list[float | None]) -> str:
     return " / ".join("n/a" if value is None else f"{value:.2f}" for value in values)
 
 
-def main() -> int:
-    if not DLL.is_file():
-        raise FileNotFoundError(f"missing CPU-E4 DLL: {DLL}")
-    actual_sha = sha256_file(DLL)
-    if actual_sha != EXPECTED_DLL_SHA256:
-        raise RuntimeError(f"CPU-E4 DLL SHA-256 mismatch: expected {EXPECTED_DLL_SHA256}, found {actual_sha}")
-    metrics_rows = [run_once(index) for index in range(1, 4)]
+def main(argv=None) -> int:
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--library", type=Path, default=DLL)
+    parser.add_argument("--expected-sha256", default=EXPECTED_DLL_SHA256)
+    parser.add_argument("--results", type=Path, default=RESULTS)
+    args = parser.parse_args(argv)
+    dll = args.library.resolve()
+    results = args.results.resolve()
+    if not dll.is_file():
+        raise FileNotFoundError(f"missing CPU-E4 DLL: {dll}")
+    actual_sha = sha256_file(dll)
+    if actual_sha != args.expected_sha256.lower():
+        raise RuntimeError(f"CPU-E4 DLL SHA-256 mismatch: expected {args.expected_sha256.lower()}, found {actual_sha}")
+    metrics_rows = [run_once(index, dll, results) for index in range(1, 4)]
     rows = [item[0] for item in metrics_rows]
     output_rates = [_metric_rate(row, "generated_tokens") for row in rows]
     target_rates = [_metric_rate(row, "decode_evaluated_tokens") for row in rows]
@@ -97,7 +105,7 @@ def main() -> int:
         "schema": "perf-g1/canonical-output-toks-v1", "prompt": PROMPT,
         "policy": {"temperature": 0.9, "top_k": 50, "top_p": 0.85, "seed": 0,
                     "context_limit": 2048, "max_new_tokens": 256, "system": rows[0].get("system")},
-        "dll": {"path": str(DLL.relative_to(ROOT)), "sha256": actual_sha},
+        "dll": {"path": str(dll.relative_to(ROOT)) if dll.is_relative_to(ROOT) else str(dll), "sha256": actual_sha},
         "runs": [
             {"index": index, "output_tokens_per_second": output_rates[index - 1],
              "legacy_target_tokens_per_second": target_rates[index - 1],
@@ -112,8 +120,9 @@ def main() -> int:
         "hashes_identical_across_runs": {"sampled_ids": len(set(sampled_hashes)) == 1,
                                           "text": len(set(text_hashes)) == 1},
     }
-    (RESULTS / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (RESULTS / "SUMMARY.md").write_text(render_summary(summary), encoding="utf-8")
+    results.mkdir(parents=True, exist_ok=True)
+    (results / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (results / "SUMMARY.md").write_text(render_summary(summary), encoding="utf-8")
 
     print("Canonical prompt")
     print(PROMPT)

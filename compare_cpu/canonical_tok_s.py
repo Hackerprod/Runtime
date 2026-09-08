@@ -92,7 +92,7 @@ def main() -> int:
     generated = [int(row["generated_tokens"]) for row in rows]
     sampled_hashes = [sha256_json(row.get("sampled_ids", [])) for row in rows]
     text_hashes = [hashlib.sha256(str(row.get("text", "")).encode("utf-8")).hexdigest() for row in rows]
-    speculative = [row.get("metrics", {}).get("speculative_decode", {}) for row in rows]
+    speculative = [row.get("speculative_decode") or {} for row in rows]
     summary = {
         "schema": "perf-g1/canonical-output-toks-v1", "prompt": PROMPT,
         "policy": {"temperature": 0.9, "top_k": 50, "top_p": 0.85, "seed": 0,

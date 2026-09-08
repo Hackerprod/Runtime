@@ -174,6 +174,16 @@ class CompareMetricsTests(unittest.TestCase):
         self.assertIsNone(metrics["output_tokens_per_second"])
         self.assertIsNone(metrics["target_tokens_per_second"])
 
+    def test_speculative_telemetry_is_exposed_separately(self):
+        args = parser_args()
+        telemetry = {"proposed_blocks": 1, "accepted_tokens": 4, "verify_calls": 1}
+        result = SimpleNamespace(text="done", generated_tokens=4, context_tokens=7,
+                                 ttft_seconds=0.1, decode_seconds=0.5, backend="scalar",
+                                 metrics={"speculative_decode": telemetry})
+        counted = SimpleNamespace(decode_eval_steps=1, decode_evaluated_tokens=1)
+        metrics = compare.response_metrics(args, result, counted, 0.3)
+        self.assertEqual(metrics["speculative_decode"], telemetry)
+
     def test_print_result_preserves_unicode_json(self):
         metrics = {"text": "¡Hola!", "prefill_seconds": 0.1, "decode_seconds": 0.2,
                    "decode_tokens_per_second": 5.0, "decode_eval_steps": 1, "finish_reason": "eos"}

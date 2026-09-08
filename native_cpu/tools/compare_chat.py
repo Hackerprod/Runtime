@@ -143,6 +143,9 @@ def build_session(args):
 
 def response_metrics(args, result, counted, loading_seconds):
     threads, cpus, row_weights = _thread_values(counted)
+    result_metrics = getattr(result, "metrics", {}) or {}
+    speculative_decode = (result_metrics.get("speculative_decode")
+                          if isinstance(result_metrics, Mapping) else None)
     decode_seconds = float(result.decode_seconds)
     generated_tokens = int(result.generated_tokens)
     target_tokens = int(counted.decode_evaluated_tokens)
@@ -169,6 +172,7 @@ def response_metrics(args, result, counted, loading_seconds):
             "native_generation_seconds": getattr(result, "native_generation_seconds", 0.0),
             "sampling_seconds": getattr(result, "sampling_seconds", 0.0), "total_seconds": getattr(result, "total_seconds", 0.0),
             "sampled_ids": getattr(result, "sampled_ids", None), "diagnostics": getattr(args, "diagnostics", False),
+            "speculative_decode": speculative_decode,
             "native_stats": getattr(counted, "stats", {}),
             "native_phase_stats": getattr(result, "native_phase_stats", None),
             "selective_logits": bool(getattr(args, "selective_logits", False)),

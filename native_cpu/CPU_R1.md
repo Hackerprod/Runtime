@@ -1,5 +1,10 @@
 # CPU-R1: measured reductions in redundant FP32 work
 
+> **Historical experiment note (CPU-U1):** The switches described below are
+> retained only for reproducing frozen benchmark receipts. The current chat
+> launcher uses the consolidated CPU-U1 production route automatically and does
+> not expose these optimization flags.
+
 CPU-R1 keeps the dense MiniMind model, weights, tokenizer, chat template,
 sampling policy and FP32 accumulation kernels unchanged. The serial launcher
 remains the default; experimental behavior is opt-in.

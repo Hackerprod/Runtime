@@ -94,6 +94,21 @@ FP32 vectors remain allocated for reference, so compact storage is reported as
 additional runtime memory rather than a total-RAM reduction. CPU-R3 row4 and
 CPU-R6 are mutually exclusive, and the new flag is off by default.
 
+The bounded CPU-R6 campaign accepted this route: FFN time fell by a median
+22.540%/20.860% in prefill (prefixes 256/1792) and 21.944%/18.777% in decode;
+decode throughput improved 14.987% and 15.724%, with exact logits and all six
+historical turns matching. These are paired measurements for X0 (CPU-R5 W1)
+versus X1 (FP16 storage), not a cumulative claim over earlier experiments. Full
+raw receipts, reconstruction evidence and the fail-closed report are in
+[`benchmarks/cpu-r6/RESULTS.md`](benchmarks/cpu-r6/RESULTS.md).
+
+To try it manually on the same CPU-R5 base, add only the final flag (never
+combine it with `--ffn-row4`):
+
+```powershell
+python -m native_cpu.tools.chat --model native_cpu/artifacts/minimind-fp32.bin --tokenizer checkpoints/minimind-3-hf --selective-logits --reuse-kv --v-blocked-attention --gqa-k-shared --gqa-v-shared --ffn-f16-storage
+```
+
 Use `/clear` to reset the conversation and random generator, and `/exit` to quit.
 A one-shot invocation:
 

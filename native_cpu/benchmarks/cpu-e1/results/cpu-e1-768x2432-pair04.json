@@ -1,0 +1,58 @@
+{
+  "shape": "768x2432",
+  "rows": 768,
+  "cols": 2432,
+  "pair": 4,
+  "order": "shared-reference",
+  "repetitions": 64,
+  "warmup_repetitions": 2,
+  "reference_seconds": 0.044163,
+  "shared_seconds": 0.0131218,
+  "reference_checksum": 4622543402112680178,
+  "shared_checksum": 4622543402112680178,
+  "parity": true,
+  "exact_memcmp_parity": true,
+  "f16c_available": true,
+  "cpu": 0,
+  "threads": 1,
+  "command": [
+    "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\mm_bench_cpu_e1.exe",
+    "--pairs",
+    "6",
+    "--repetitions",
+    "64"
+  ],
+  "identity": {
+    "schema": "cpu-e1/isolated-v1",
+    "source_commit": "ad6e5ae94b65522b7779ef8a0b1b72dfd109c71b",
+    "benchmark_tree_commit": "bbc010d73c3bda7151a71d29e1da051ffde7538a",
+    "benchmark_executable": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\mm_bench_cpu_e1.exe",
+    "benchmark_executable_sha256": "cf1b0373aa3e077b874bb06a3a380258cfabf99e0fa66ac5537f6efb8b79bca2",
+    "kernel_sources_sha256": {
+      "native_cpu/include/mm_kernels.h": "717abea389e3ee2b83498d960df0e2759d1a9d6ddf5eebd42f0cdc5007339be0",
+      "native_cpu/src/kernels.cpp": "108c684532a1b2f4cc4a50183262c21124d07f3c0db687f08704a6cf6dc09317",
+      "native_cpu/benchmarks/cpu-e1/kernel_bench.cpp": "160a61df4c0f6aa33fa18cb33d77e0325b7ee2302faec40d4d4b3ae84fc8b751"
+    },
+    "shapes": [
+      {
+        "name": "2432x768",
+        "rows": 2432,
+        "cols": 768
+      },
+      {
+        "name": "768x2432",
+        "rows": 768,
+        "cols": 2432
+      }
+    ],
+    "pairs": 6,
+    "repetitions": 64,
+    "warmup_repetitions": 2,
+    "cpu": 0,
+    "threads": 1,
+    "mode": "auto",
+    "preparation_and_verification_excluded": true,
+    "reference": "four independent gemv_f16 calls",
+    "candidate": "one gemv_f16_x4 call sharing each converted weight fragment across four inputs"
+  }
+}

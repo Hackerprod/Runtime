@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "experiment": "CPU-E1 isolated four-input FP16 GEMV",
+  "status": "PASS",
+  "performance_decision": "accepted-for-next-integration",
+  "source_commit": "ad6e5ae94b65522b7779ef8a0b1b72dfd109c71b",
+  "benchmark_tree_commit": "bbc010d73c3bda7151a71d29e1da051ffde7538a",
+  "benchmark_executable": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\mm_bench_cpu_e1.exe",
+  "benchmark_executable_sha256": "cf1b0373aa3e077b874bb06a3a380258cfabf99e0fa66ac5537f6efb8b79bca2",
+  "test_executable": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\mm_test_kernels.exe",
+  "test_executable_sha256": "7b6de4f501bcda961137a320b5bd0c3c450b89b3b33165975f970b95eabe0405",
+  "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /fp:precise /std:c++20",
+  "compiler": {
+    "id": "MSVC",
+    "version": "19.50.35727.0",
+    "generator": "Visual Studio 18 2026"
+  },
+  "sources_sha256": {
+    "native_cpu/CMakeLists.txt": "e5b91289091c3403898f2d6ff7320f4f1f6d64e3df765b6aa0d31bbfb2638c72",
+    "native_cpu/include/mm_kernels.h": "717abea389e3ee2b83498d960df0e2759d1a9d6ddf5eebd42f0cdc5007339be0",
+    "native_cpu/src/kernels.cpp": "108c684532a1b2f4cc4a50183262c21124d07f3c0db687f08704a6cf6dc09317",
+    "native_cpu/tests/test_kernels.cpp": "30242a19ccf23a0660c0cfcc9c03ccb5e5d40eabd8a7a38611eee2b5343e3e54",
+    "native_cpu/benchmarks/cpu-e1/kernel_bench.cpp": "160a61df4c0f6aa33fa18cb33d77e0325b7ee2302faec40d4d4b3ae84fc8b751",
+    "native_cpu/benchmarks/cpu-e1/benchmark.py": "4ee85384d31c31eb1d031a4b1927e81b8bf07866663a883f1dc343705b457a69",
+    "native_cpu/benchmarks/cpu-e1/summarize.py": "19586dacbc20453f38f6ad2a5891b5e3d92e29a74c32fdf7cb6224ab933a10b9"
+  },
+  "configuration": {
+    "reference": "four independent gemv_f16 calls",
+    "candidate": "gemv_f16_x4; one weight conversion reused across four independent inputs",
+    "shapes": [
+      {
+        "rows": 2432,
+        "cols": 768
+      },
+      {
+        "rows": 768,
+        "cols": 2432
+      }
+    ],
+    "small_test_shapes": [
+      {
+        "rows": 3,
+        "cols": 9
+      },
+      {
+        "rows": 5,
+        "cols": 17
+      },
+      {
+        "rows": 7,
+        "cols": 31
+      },
+      {
+        "rows": 4,
+        "cols": 8
+      }
+    ],
+    "pairs_per_shape": 6,
+    "orders": "alternating reference-shared/shared-reference",
+    "repetitions": 64,
+    "warmup_repetitions": 2,
+    "cpu": 0,
+    "threads": 1,
+    "mode": "auto",
+    "f16c_required_for_vector_path": true,
+    "preparation_allocation_verification_excluded": true,
+    "runtime_connected": false
+  },
+  "receipts": {
+    "raw_directory": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\benchmarks\\cpu-e1\\results",
+    "pair_files": 12,
+    "identity": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\benchmarks\\cpu-e1\\results\\identity.json",
+    "summary": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\benchmarks\\cpu-e1\\results\\summary.json",
+    "report": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\benchmarks\\cpu-e1\\RESULTS.md"
+  }
+}

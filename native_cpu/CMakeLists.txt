@@ -35,6 +35,11 @@ if(BUILD_TESTING)
   target_include_directories(mm_bench_cpu_e5 PRIVATE include)
   mm_compile_options(mm_bench_cpu_e5)
 
+  # Standalone CPU-E7 LM-head FP16 viability benchmark; it is not connected to the runtime.
+  add_executable(mm_bench_cpu_e7 benchmarks/cpu-e7/kernel_bench.cpp src/kernels.cpp)
+  target_include_directories(mm_bench_cpu_e7 PRIVATE include)
+  mm_compile_options(mm_bench_cpu_e7)
+
   add_executable(mm_test_runtime tests/test_runtime.cpp)
   target_link_libraries(mm_test_runtime PRIVATE minimind_cpu)
   mm_compile_options(mm_test_runtime)

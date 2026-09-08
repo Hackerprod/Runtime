@@ -42,6 +42,8 @@ MM_RUNTIME_API int mm_configure_profile(void* runtime, int enabled);
 MM_RUNTIME_API int mm_reset_stats(void* runtime);
 MM_RUNTIME_API int mm_get_stats(void* runtime, MmRuntimeStats* out_stats);
 MM_RUNTIME_API uint64_t mm_lm_head_calls(void* runtime);
+MM_RUNTIME_API int mm_configure_selective_logits(void* runtime, int enabled);
+MM_RUNTIME_API int mm_selective_logits(void* runtime);
 
 /* Configure the persistent row-sharding GEMV worker team. threads is in
  * [1, 64] total participants. Participant 0 is the caller during mm_eval;

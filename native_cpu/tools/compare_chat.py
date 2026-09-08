@@ -106,7 +106,11 @@ def build_session(args):
         threads = getattr(args, "threads", 1)
         cpus = getattr(args, "cpus", None)
         row_weights = getattr(args, "row_weights", None)
-        if args.backend == "original" and (threads != 1 or cpus is not None or row_weights is not None):
+        selective_logits = bool(getattr(args, "selective_logits", False))
+        diagnostics = bool(getattr(args, "diagnostics", False))
+        if args.backend == "original" and (threads != 1 or cpus is not None or row_weights is not None or selective_logits or diagnostics):
+            if selective_logits: raise ValueError("--selective-logits is supported only by the native backend")
+            if diagnostics: raise ValueError("--diagnostics is supported only by the native backend")
             raise ValueError("thread affinity and row-sharding options are supported only by the native backend")
         if args.backend == "native":
             _require_file(args.model, "native FP32 model", "--model"); _require_file(args.library, "native library", "--library")
@@ -121,7 +125,11 @@ def build_session(args):
             _require_file(args.checkpoint_dir / "model.safetensors", "official weights", "--checkpoint-dir")
             runtime = OriginalRuntime(args.checkpoint_dir, args.context_limit)
         configure = getattr(runtime, "configure_profile", None)
-        if configure is not None: configure(bool(getattr(args, "diagnostics", False)))
+        if diagnostics and configure is None: raise ValueError("native runtime does not support diagnostics")
+        if configure is not None: configure(diagnostics)
+        selective = getattr(runtime, "configure_selective_logits", None)
+        if selective_logits and selective is None: raise ValueError("native runtime does not support selective logits")
+        if selective is not None: selective(selective_logits)
         counted = CountedRuntime(runtime)
         session = ChatSession(counted, tokenizer, context_limit=args.context_limit, max_new_tokens=args.max_new_tokens,
                               temperature=args.temperature, seed=args.seed, system=getattr(args, "system", None),
@@ -154,6 +162,7 @@ def response_metrics(args, result, counted, loading_seconds):
             "sampled_ids": getattr(result, "sampled_ids", None), "diagnostics": getattr(args, "diagnostics", False),
             "native_stats": getattr(counted, "stats", {}),
             "native_phase_stats": getattr(result, "native_phase_stats", None),
+            "selective_logits": bool(getattr(args, "selective_logits", False)),
             "decode_tokens_per_second": counted.decode_evaluated_tokens / result.decode_seconds if counted.decode_evaluated_tokens and result.decode_seconds > 0 else None,
             "finish_reason": "eos" if result.generated_tokens < args.max_new_tokens else "length"}
 
@@ -180,6 +189,7 @@ def make_parser():
     parser.add_argument("--context-limit", type=int, default=2048); parser.add_argument("--max-new-tokens", type=int, default=256); parser.add_argument("--temperature", type=float); parser.add_argument("--top-k", type=int); parser.add_argument("--top-p", type=float); parser.add_argument("--system"); parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--threads", type=int, default=1, help="native compute participants including caller (1-64)")
     parser.add_argument("--diagnostics", action="store_true", help="enable native diagnostic profiling (off by default)")
+    parser.add_argument("--selective-logits", action="store_true", help="evaluate vocabulary logits only when requested")
     parser.add_argument("--cpus", help="comma-separated Windows group-0 logical CPU indices in participant order")
     parser.add_argument("--row-weights", dest="row_weights", help="comma-separated positive native row-shard weights")
     return parser

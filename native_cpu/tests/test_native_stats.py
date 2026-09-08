@@ -9,3 +9,5 @@ def test_stats_abi_is_stable_and_exposed():
     assert hasattr(NativeRuntime, "stats")
     assert hasattr(NativeRuntime, "configure_profile")
     assert hasattr(NativeRuntime, "reset_stats")
+    assert hasattr(NativeRuntime, "configure_selective_logits")
+    assert hasattr(NativeRuntime, "selective_logits")

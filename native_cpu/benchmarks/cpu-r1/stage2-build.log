@@ -1,0 +1,54 @@
++ C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe -S D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu -B D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -G Visual Studio 18 2026 -A x64
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: D:/Install/Dev/Projects/IA/Multi MoE/minimind/native_cpu/build
++ C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build --config Release --parallel 1 -- /nr:false
+Versión de MSBuild 18.4.0+6e61e96ac para .NET Framework
+
+  runtime.cpp
+     Creando biblioteca D:/Install/Dev/Projects/IA/Multi MoE/minimind/native_cpu/build/Release/minimind_cpu.lib y objeto D:/Install/Dev/Projects/IA/Multi MoE/minimind/native_cpu/build/Release/minimind_cpu.exp
+  minimind_cpu.vcxproj -> D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\Release\minimind_cpu.dll
+  D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\Release\minimind_cpu.dll: message: deploying dependencies
+  mm_test_kernels.vcxproj -> D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\Release\mm_test_kernels.exe
+cl : línea de comandos  warning D9025: invalidando '/DNDEBUG' con '/UNDEBUG' [D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\mm_test_runtime.vcxproj]
+  test_runtime.cpp
+  mm_test_runtime.vcxproj -> D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\Release\mm_test_runtime.exe
+  D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\Release\mm_test_runtime.exe: message: deploying dependencies
+  D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\Release\minimind_cpu.dll: message: deploying dependencies
++ C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe --test-dir D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build -C Release --output-on-failure
+Test project D:/Install/Dev/Projects/IA/Multi MoE/minimind/native_cpu/build
+    Start 1: mm_kernels
+1/2 Test #1: mm_kernels .......................   Passed    0.02 sec
+    Start 2: mm_runtime
+2/2 Test #2: mm_runtime .......................   Passed    0.25 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.28 sec
+{
+  "build_type": "Release",
+  "cmake": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+  "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /EHsc /fp:precise /std:c++20",
+  "compiler": {
+    "id": "MSVC",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+    "version": "19.50.35727.0"
+  },
+  "generator": "Visual Studio 18 2026",
+  "library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\minimind_cpu.dll",
+  "library_sha256": "811f797c3be6105440b9890d3d9f576004f26b7c1b566d981f34441edabb2392",
+  "native_sources_sha256": {
+    "native_cpu/CMakeLists.txt": "5f460690b76922b7bb5785c12fee9bd1715d8a87508968aa1868f9c34e885166",
+    "native_cpu/include/mm_kernels.h": "b6c07a29316bbc98eeb209ed62c26eafc2f130b1a1e10fdfbc0aab3255654b4f",
+    "native_cpu/include/mm_parallel.h": "9553dfa8212e43977c3502cb9f51d603192641d51fe9aa4e552bffc41e73a20d",
+    "native_cpu/include/mm_runtime.h": "45cb3c0a54bd88afb6795cfe8bec4f796ce56fd26c2a077e587be973c0113858",
+    "native_cpu/src/kernels.cpp": "1afcf2844a5917a39cc52907ce0033fd7793153863df79ee236827f7190bfdd4",
+    "native_cpu/src/parallel.cpp": "c9bdd91cec7858cd7246c11f8e6774a2e4cd5d35e7c10fb097200caf81a20a8f",
+    "native_cpu/src/runtime.cpp": "44388cc18ff655ba2a1c8ffe038626b8c945fe6a74d098691ddb716c1464cb57",
+    "native_cpu/tests/test_kernels.cpp": "e5414578bac4a5f3decd6e24efb85939bb5f30766c8b45796c76fa0beb01e5f7",
+    "native_cpu/tests/test_runtime.cpp": "53c022cc839ef6e2614b67ab8d0d3e9e9ef8b0c5289329bcf12988b1fde860e5"
+  },
+  "native_threads": 1,
+  "schema_version": 1
+}

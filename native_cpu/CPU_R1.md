@@ -46,3 +46,23 @@ Counters accumulate in memory; no files or output are written in the hot loop.
 Use profiling-off runs for final speed comparisons. Diagnostic overhead must be
 measured separately. No measured DRAM bandwidth, energy, or cache-miss claim is
 made without actual hardware counters.
+
+## Selective logits (opt-in)
+
+Pass `--selective-logits` to either native Python frontend. For a nonempty
+`eval(ids)` call, every token still executes all transformer layers and commits
+KV at its original position, but only the final token produces vocabulary
+logits. A single-token generation call still produces one vocabulary head.
+The default all-heads path remains available in the same DLL for attribution.
+
+The C API exposes `mm_configure_selective_logits` and `mm_selective_logits`;
+Python exposes `configure_selective_logits(bool)` and `selective_logits`.
+An old DLL permits the disabled/default mode but rejects enabling the feature.
+This does not change the model architecture or promise faster decode.
+
+Discarded positions validate newly committed key/value state and final normalized
+hidden state without calculating an unused vocabulary projection. Requested
+logits retain the finite-output check. A reset or execution failure invalidates
+logits, and failed batches retain the previous logical cache position. The
+skipped projection itself is not evaluated for overflow at discarded positions;
+the internal state, rather than a nonexistent vocabulary output, is validated.

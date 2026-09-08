@@ -266,6 +266,7 @@ def _response_json(r, args):
         "sampled_ids": r.sampled_ids,
         "native_phase_stats": r.native_phase_stats,
         "diagnostics": bool(getattr(args, "diagnostics", False)),
+        "selective_logits": bool(getattr(args, "selective_logits", False)),
     }
 
 
@@ -301,6 +302,7 @@ def main(argv=None):
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--metrics-json", action="store_true")
     p.add_argument("--diagnostics", action="store_true", help="enable native diagnostic profiling (off by default)")
+    p.add_argument("--selective-logits", action="store_true", help="evaluate vocabulary logits only when requested")
     args = _resolve_profile(p.parse_args(argv))
     if args.max_new_tokens < 0: p.error("--max-new-tokens must be non-negative")
     if args.context_limit < 2: p.error("--context-limit must be at least 2")
@@ -312,6 +314,9 @@ def main(argv=None):
         with NativeRuntime(args.model,args.library,args.context_limit) as runtime:
             configure = getattr(runtime, "configure_profile", None)
             if configure is not None: configure(bool(args.diagnostics))
+            selective = getattr(runtime, "configure_selective_logits", None)
+            if args.selective_logits and selective is None: raise NativeError("native runtime does not support selective logits")
+            if selective is not None: selective(bool(args.selective_logits))
             session = ChatSession(runtime, tokenizer, context_limit=args.context_limit,
                                   max_new_tokens=args.max_new_tokens,
                                   temperature=args.temperature, top_k=args.top_k,

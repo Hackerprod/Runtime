@@ -591,8 +591,95 @@ void test_diagnostic_profile_contract() {
     std::filesystem::remove(path);
 }
 
+void test_selective_logits_contract() {
+    const auto path = write_file(threading_fixture(false), ".selective");
+    const std::vector<int32_t> ids = {1, 4, 7, 2, 9, 11, 3, 8};
+    for (int mode : {0, 1}) {
+        // Establish an all-head reference at every logical position.  The
+        // candidate is allowed to return only the endpoint of each chunk.
+        char error[256]{};
+        ScopedRuntime reference(path, mode);
+        std::vector<Logits> expected;
+        for (const int32_t token : ids) expected.push_back(evaluate(reference.value, {token}));
+        assert(mm_position(reference.value) == ids.size());
+        assert(mm_lm_head_calls(reference.value) == ids.size());
+
+        for (uint32_t threads : {1u, 2u, 4u}) {
+            for (const std::vector<size_t>& partitions : {
+                std::vector<size_t>{8}, std::vector<size_t>{1,1,1,1,1,1,1,1},
+                std::vector<size_t>{2,2,2,2}, std::vector<size_t>{3,3,2},
+                std::vector<size_t>{4,4}}) {
+                for (const std::vector<int32_t>& prefix : {
+                    std::vector<int32_t>{}, std::vector<int32_t>{1,4}}) {
+                    std::vector<Logits> prefix_expected;
+                    if (prefix.empty()) {
+                        prefix_expected = expected;
+                    } else {
+                        ScopedRuntime prefix_reference(path, mode);
+                        (void)evaluate(prefix_reference.value, prefix);
+                        for (const int32_t token : ids)
+                            prefix_expected.push_back(evaluate(prefix_reference.value, {token}));
+                    }
+                    ScopedRuntime candidate(path, mode);
+                    configure(candidate.value, threads);
+                    assert(mm_configure_selective_logits(candidate.value, 1) == 0);
+                    assert(mm_selective_logits(candidate.value) == 1);
+                    assert(mm_reset(candidate.value) == 0);
+                    if (!prefix.empty()) {
+                        (void)evaluate(candidate.value, prefix);
+                        assert(mm_position(candidate.value) == prefix.size());
+                    }
+                    assert(mm_reset_stats(candidate.value) == 0);
+                    size_t offset = 0;
+                    uint64_t calls = 0;
+                    for (const size_t width : partitions) {
+                        assert(offset + width <= ids.size());
+                        std::vector<int32_t> chunk(ids.begin() + offset, ids.begin() + offset + width);
+                        const Logits actual = evaluate(candidate.value, chunk);
+                        assert_exact(actual, prefix_expected[offset + width - 1]);
+                        offset += width;
+                        ++calls;
+                        assert(mm_position(candidate.value) == prefix.size() + offset);
+                    }
+                    assert(offset == ids.size());
+                    assert(mm_lm_head_calls(candidate.value) == calls);
+                    assert(mm_configure_selective_logits(candidate.value, 0) == 0);
+                    assert(mm_selective_logits(candidate.value) == 0);
+                }
+            }
+        }
+
+        // Toggling the optimization off after a cached prefix must preserve
+        // the continuation exactly, not invalidate or replay the KV cache.
+        ScopedRuntime toggled(path, mode), control(path, mode);
+        configure(toggled.value, 2);
+        configure(control.value, 2);
+        assert(mm_configure_selective_logits(toggled.value, 1) == 0);
+        (void)evaluate(toggled.value, {ids[0], ids[1]});
+        (void)evaluate(control.value, {ids[0], ids[1]});
+        assert(mm_configure_selective_logits(toggled.value, 0) == 0);
+        assert_exact(evaluate(toggled.value, {ids[2], ids[3]}),
+                     evaluate(control.value, {ids[2], ids[3]}));
+
+        // Invalid input and context overflow are transactional in selective mode.
+        assert(mm_reset(toggled.value) == 0);
+        assert(mm_configure_selective_logits(toggled.value, 1) == 0);
+        (void)evaluate(toggled.value, {ids[0], ids[1]});
+        const uint32_t before = mm_position(toggled.value);
+        const int32_t invalid = static_cast<int32_t>(thread_vocab);
+        Logits output{};
+        assert(mm_eval(toggled.value, &invalid, 1, output.data(), output.size(), error, sizeof(error)) != 0);
+        assert(mm_position(toggled.value) == before && error[0] != '\0');
+        std::vector<int32_t> too_long(15, ids[0]);
+        assert(mm_eval(toggled.value, too_long.data(), too_long.size(), output.data(), output.size(), error, sizeof(error)) != 0);
+        assert(mm_position(toggled.value) == before);
+    }
+    std::filesystem::remove(path);
+}
+
 int main() {
     test_diagnostic_profile_contract();
+    test_selective_logits_contract();
     test_cache_reset_and_overflow();
     test_crc_and_truncation();
     test_rejects_malformed_metadata();

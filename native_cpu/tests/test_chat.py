@@ -74,6 +74,10 @@ class ChatTests(unittest.TestCase):
         parity = _resolve_profile(Namespace(profile="parity", temperature=None, top_k=None, top_p=None, system=None))
         self.assertEqual((parity.temperature, parity.top_k, parity.top_p, parity.system), (0.0, 0, 1.0, None))
 
+    def test_selective_logits_flag_defaults_off(self):
+        from argparse import Namespace
+        self.assertFalse(getattr(Namespace(), "selective_logits", False))
+
     def test_response_json_records_effective_sampling_policy(self):
         from argparse import Namespace
 

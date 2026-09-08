@@ -79,6 +79,12 @@ class NativeRuntime:
         self._lm_head_calls = getattr(lib, "mm_lm_head_calls", None)
         if self._lm_head_calls is not None:
             self._lm_head_calls.argtypes = [ctypes.c_void_p]; self._lm_head_calls.restype = ctypes.c_uint64
+        self._configure_selective = getattr(lib, "mm_configure_selective_logits", None)
+        self._query_selective = getattr(lib, "mm_selective_logits", None)
+        if self._configure_selective is not None:
+            self._configure_selective.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_selective.restype = ctypes.c_int
+        if self._query_selective is not None:
+            self._query_selective.argtypes = [ctypes.c_void_p]; self._query_selective.restype = ctypes.c_int
         self._configure_threads = getattr(lib, "mm_configure_threads", None)
         self._thread_count = getattr(lib, "mm_thread_count", None)
         self._thread_cpu = getattr(lib, "mm_thread_cpu", None)
@@ -163,6 +169,19 @@ class NativeRuntime:
     def reset(self):
         self._check()
         if int(self._lib.mm_reset(self._handle)) != 0: raise NativeError("mm_reset failed")
+
+    def configure_selective_logits(self, enabled=True):
+        self._check()
+        if self._configure_selective is None:
+            if not enabled: return
+            raise NativeError("native runtime does not support selective logits")
+        if int(self._configure_selective(self._handle, int(bool(enabled)))) != 0: raise NativeError("mm_configure_selective_logits failed")
+
+    @property
+    def selective_logits(self):
+        self._check()
+        if self._query_selective is None: return False
+        return bool(self._query_selective(self._handle))
 
     def configure_profile(self, enabled=True):
         self._check()

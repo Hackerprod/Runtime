@@ -305,6 +305,8 @@ struct Runtime {
     enum class ProfileOp : std::uint32_t { Qkv, Attention, Output, Ffn, Vocab, Remaining };
     MmRuntimeStats stats{};
     bool profile_enabled = false;
+    bool selective_logits = false;
+    bool logits_valid = false;
     Config config;
     uint32_t max_context = 0;
     mm::KernelMode kernel_mode = mm::KernelMode::Scalar;
@@ -443,7 +445,8 @@ struct Runtime {
         }
     }
 
-    void step(int32_t token) {
+    void step(int32_t token, bool emit_logits = true) {
+        logits_valid = false;
         const auto step_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         const auto qkv_before = stats.qkv_ns; const auto attn_before = stats.attention_kv_ns;
         const auto output_before = stats.output_projection_ns; const auto ffn_before = stats.ffn_ns;
@@ -471,6 +474,10 @@ struct Runtime {
             std::copy(q_rot.begin(), q_rot.end(), q.begin());
             std::copy(k_rot.begin(), k_rot.end(), k.begin());
             rotate(position);
+            if (!emit_logits) {
+                for (float value : k_rot) if (!std::isfinite(value)) throw std::runtime_error("non-finite key state");
+                for (float value : v) if (!std::isfinite(value)) throw std::runtime_error("non-finite value state");
+            }
             std::copy(q_rot.begin(), q_rot.end(), q.begin());
             std::copy(k_rot.begin(), k_rot.end(), k.begin());
             for (uint32_t h = 0; h < config.kv_heads; ++h) {
@@ -528,9 +535,13 @@ struct Runtime {
             for (uint32_t d = 0; d < config.hidden; ++d) hidden[d] += projection[d];
         }
         rms_norm(hidden, tensor("model.norm.weight"), config.rms_eps, normed);
-        ++stats.lm_head_calls;
-        gemv(tensor("model.embed_tokens.weight"), normed.data(), logits.data(), ProfileOp::Vocab);
-        for (float value : logits) if (!std::isfinite(value)) throw std::runtime_error("non-finite logits");
+        for (float value : normed) if (!std::isfinite(value)) throw std::runtime_error("non-finite hidden state");
+        if (emit_logits) {
+            ++stats.lm_head_calls;
+            gemv(tensor("model.embed_tokens.weight"), normed.data(), logits.data(), ProfileOp::Vocab);
+            for (float value : logits) if (!std::isfinite(value)) throw std::runtime_error("non-finite logits");
+            logits_valid = true;
+        }
         ++position;
         if (profile_enabled) {
             const auto total = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - step_started).count());
@@ -550,11 +561,13 @@ struct EvalWork {
     const int32_t* token_ids = nullptr;
     size_t count = 0;
     float* last_logits = nullptr;
+    bool selective = false;
 };
 
 static void run_eval_work(void* raw) {
     auto* work = static_cast<EvalWork*>(raw);
-    for (size_t i = 0; i < work->count; ++i) work->model->step(work->token_ids[i]);
+    for (size_t i = 0; i < work->count; ++i) work->model->step(work->token_ids[i], !work->selective || i + 1 == work->count);
+    if (!work->model->logits_valid) throw std::runtime_error("logits were not produced");
     std::copy(work->model->logits.begin(), work->model->logits.end(), work->last_logits);
 }
 
@@ -595,7 +608,9 @@ MM_RUNTIME_API void mm_free(void* runtime) { delete static_cast<Runtime*>(runtim
 
 MM_RUNTIME_API int mm_reset(void* runtime) {
     try {
-        checked_runtime(runtime)->position = 0;
+        Runtime* model = checked_runtime(runtime);
+        model->position = 0;
+        model->logits_valid = false;
         return 0;
     } catch (...) {
         return -1;
@@ -652,6 +667,15 @@ MM_RUNTIME_API uint64_t mm_lm_head_calls(void* runtime) {
     try { return checked_runtime(runtime)->stats.lm_head_calls; } catch (...) { return 0; }
 }
 
+MM_RUNTIME_API int mm_configure_selective_logits(void* runtime, int enabled) {
+    if (enabled != 0 && enabled != 1) return -1;
+    try { checked_runtime(runtime)->selective_logits = enabled != 0; return 0; } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_selective_logits(void* runtime) {
+    try { return checked_runtime(runtime)->selective_logits ? 1 : 0; } catch (...) { return 0; }
+}
+
 MM_RUNTIME_API int mm_configure_threads(void* runtime, uint32_t threads,
                                          const uint32_t* cpu_indices,
                                          const uint32_t* row_weights,
@@ -695,10 +719,13 @@ MM_RUNTIME_API int mm_eval(void* runtime, const int32_t* token_ids, size_t count
         }
         const uint32_t old_position = model->position;
         try {
-            EvalWork work{model, token_ids, count, last_logits};
+            model->logits_valid = false;
+            EvalWork work{model, token_ids, count, last_logits, model->selective_logits};
             model->parallel.execute(run_eval_work, &work);
+            if (!model->logits_valid) throw std::runtime_error("logits were not produced");
         } catch (...) {
             model->position = old_position;
+            model->logits_valid = false;
             throw;
         }
         return 0;

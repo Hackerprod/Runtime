@@ -1,0 +1,57 @@
+{
+  "identity": {
+    "schema": "cpu-e4.1/no-match-v1",
+    "source_commit": "ce74d74f20140aab003966f2b6396945f16ec7f0",
+    "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+    "baseline_library_sha256": "3ff9418181d29ad9f7761e2a48866f06759027b4599ef1d024f24ac4cd3acfd5",
+    "candidate_library_sha256": "b410e642e2249a8982a9a83b134f3d7f5e1f37c677f11d10900ed0e213cb97ab",
+    "prefix_length": 1792,
+    "max_new_tokens": 32,
+    "temperature": 0.9,
+    "top_k": 50,
+    "top_p": 0.85,
+    "seed": 0,
+    "threads": 1,
+    "cpus": [
+      0
+    ],
+    "row_weights": [
+      1
+    ],
+    "profiler": false,
+    "workload": "1792-token prefix with no useful 12-to-4 speculative hit",
+    "timed_operation": "decode including lookup and normal steps; context preparation excluded"
+  },
+  "pairs": 3,
+  "parity": true,
+  "profiles": {
+    "A": {
+      "decode_seconds_median": 0.46402209997177124,
+      "prepare_seconds_median": 11.669906300026923,
+      "native_generation_seconds_median": 0.4469329006969929
+    },
+    "B": {
+      "decode_seconds_median": 0.4772245001513511,
+      "prepare_seconds_median": 11.710682599805295,
+      "native_generation_seconds_median": 0.4573019000235945
+    }
+  },
+  "paired_decode_time_reductions": [
+    -0.019489007473152187,
+    0.07679306122771457,
+    -0.18289516840336129
+  ],
+  "median_decode_time_reduction": -0.019489007473152187,
+  "favorable_pairs": 1,
+  "candidate_verify_calls": [
+    0,
+    0,
+    0
+  ],
+  "candidate_lookup_seconds": [
+    0.002856999635696411,
+    0.002917600329965353,
+    0.0030599997844547033
+  ],
+  "status": "PASS"
+}

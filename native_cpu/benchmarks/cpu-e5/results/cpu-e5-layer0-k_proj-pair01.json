@@ -1,0 +1,82 @@
+{
+  "projection": "k_proj",
+  "layer": 0,
+  "rows": 384,
+  "cols": 768,
+  "pair": 1,
+  "order": "f32-f16-f16-x4",
+  "repetitions": 8,
+  "warmup_repetitions": 2,
+  "x1_a_seconds": 0.0001657,
+  "x1_b_seconds": 0.0001714,
+  "x1_a_checksum": 8200490963923026979,
+  "x1_b_checksum": 8200490963923026979,
+  "x1_exact_memcmp_parity": true,
+  "x4_a_seconds": 0.0006719,
+  "x4_b_seconds": 0.0002517,
+  "x4_a_checksum": 9512789345190386600,
+  "x4_b_checksum": 9512789345190386600,
+  "x4_exact_memcmp_parity": true,
+  "f16c_available": true,
+  "cpu": 0,
+  "threads": 1,
+  "identity": {
+    "schema": "cpu-e5/isolated-attention-v1",
+    "source_commit": "f02d448b21c062d5f1ed301e68c3e7bf264b5f1d",
+    "checkpoint": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\checkpoints\\minimind-3-hf\\model.safetensors",
+    "checkpoint_sha256": "3adf69402b5d22e693151cabadc12528f923c4ba6bf343738aaf13f0892162e8",
+    "artifact": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\artifacts\\minimind-fp32.bin",
+    "artifact_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+    "benchmark_executable": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build-e5\\Release\\mm_bench_cpu_e5.exe",
+    "benchmark_executable_sha256": "2242e0edacc8705f7f1ec480dfb368757813f707125744ef839f6b7033daa8ab",
+    "benchmark_source_sha256": "d4d0f13ca8a5c7f68e06855135e4e3e9b70dcc39852c979df7f1bb919ac6540a",
+    "cmake_sha256": "31b3e2902e210734e5382b05bff1395858aa972b99e68b1d6c93e0f592dce188",
+    "layers": 8,
+    "projections": {
+      "q_proj": [
+        768,
+        768
+      ],
+      "k_proj": [
+        384,
+        768
+      ],
+      "v_proj": [
+        384,
+        768
+      ],
+      "o_proj": [
+        768,
+        768
+      ]
+    },
+    "matrix_count": 32,
+    "elements": 14155776,
+    "pairs": 3,
+    "repetitions": 8,
+    "warmup_repetitions": 2,
+    "cpu": 0,
+    "threads": 1,
+    "preparation_and_verification_excluded": true,
+    "x1_reference": "gemv_f32",
+    "x1_candidate": "gemv_f16",
+    "x4_reference": "four independent gemv_f16 calls",
+    "x4_candidate": "gemv_f16_x4",
+    "compiler": {
+      "id": "MSVC",
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+      "version": "19.50.35727.0"
+    },
+    "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /EHsc /fp:precise /std:c++20",
+    "generator": "Visual Studio 18 2026"
+  },
+  "command": [
+    "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build-e5\\Release\\mm_bench_cpu_e5.exe",
+    "--payload",
+    "{temporary_payload}",
+    "--pairs",
+    "3",
+    "--repetitions",
+    "8"
+  ]
+}

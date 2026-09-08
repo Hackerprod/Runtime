@@ -192,6 +192,141 @@ class ChatSession:
         after = self._position()
         if after is not None and before is not None and after != before + len(values): raise RuntimeError("runtime position did not advance by evaluated token count")
         self.cached_token_ids.extend(values); self._cache_identity = self._identity(); return logits
+    def _speculation_available(self):
+        return (callable(getattr(self.runtime, "verify_x4", None))
+                and bool(getattr(self.runtime, "supports_verify_x4", False))
+                and bool(getattr(self.runtime, "supports_truncate", False)))
+    def _lookup_proposal(self):
+        """Return four followers of the latest non-overlapping 12-token match."""
+        history = self.cached_token_ids
+        key_size = 12
+        proposal_size = 4
+        if len(history) < key_size * 2 + proposal_size:
+            return None
+        key_start = len(history) - key_size
+        key = history[key_start:]
+        # A candidate must finish before the current key.  Searching backwards
+        # makes the first match the most recent eligible occurrence.
+        for start in range(key_start - key_size, -1, -1):
+            if history[start:start + key_size] == key:
+                end = start + key_size
+                if end + proposal_size <= len(history):
+                    return tuple(int(x) for x in history[end:end + proposal_size])
+        return None
+    def _commit_verified(self, ids):
+        values = list(ids)
+        position = self._position()
+        if position is not None and position != len(self.cached_token_ids) + len(values):
+            raise RuntimeError("verified cache position invariant violated")
+        self.cached_token_ids.extend(values); self._cache_identity = self._identity()
+    @staticmethod
+    def _new_speculative_metrics():
+        return {"proposed_blocks": 0, "proposed_tokens": 0, "accepted_tokens": 0,
+                "verify_calls": 0, "first_position_failures": 0,
+                "accepted_length_total": 0, "mean_accepted_length": 0.0,
+                "lookup_seconds": 0.0, "verification_seconds": 0.0}
+    def _decode_tokens(self, logits, eos):
+        generated, sampled_ids = [], []
+        sampling_seconds = 0.0
+        native_generation_seconds = 0.0
+        decode_evaluated = 0
+        speculative = self._new_speculative_metrics()
+        index = 0
+        while index < self.max_new_tokens:
+            sample_started = time.perf_counter()
+            token = int(self._sample(logits))
+            sampling_seconds += time.perf_counter() - sample_started
+            sampled_ids.append(token)
+            if token == eos:
+                break
+            generated.append(token)
+            # CPU-E2 never evaluates the last sampled token.  A four-token
+            # verification is therefore allowed only when all four tokens are
+            # strictly before that boundary (at least five slots remain).
+            if index + 1 >= self.max_new_tokens:
+                break
+            proposal = None
+            if index + 4 < self.max_new_tokens and self._speculation_available():
+                lookup_started = time.perf_counter()
+                proposal = self._lookup_proposal()
+                speculative["lookup_seconds"] += time.perf_counter() - lookup_started
+            if proposal is None:
+                native_started = time.perf_counter()
+                logits = self._eval_and_commit([token])
+                native_generation_seconds += time.perf_counter() - native_started
+                decode_evaluated += 1
+                index += 1
+                continue
+            speculative["proposed_blocks"] += 1
+            speculative["proposed_tokens"] += 4
+            if token != proposal[0]:
+                speculative["first_position_failures"] += 1
+                native_started = time.perf_counter()
+                logits = self._eval_and_commit([token])
+                native_generation_seconds += time.perf_counter() - native_started
+                decode_evaluated += 1
+                index += 1
+                continue
+
+            base_position = self._position()
+            verify_started = time.perf_counter()
+            target_logits = self.runtime.verify_x4(np.asarray(proposal, dtype=np.int32))
+            verification_seconds = time.perf_counter() - verify_started
+            speculative["verification_seconds"] += verification_seconds
+            speculative["verify_calls"] += 1
+            native_generation_seconds += verification_seconds
+            accepted = 1
+            mismatch = None
+            eos_hit = False
+            mismatch_offset = None
+            for offset in range(1, 4):
+                sample_started = time.perf_counter()
+                # Row n is the logits after proposal[n], so it samples the
+                # following proposal token (offset n + 1).
+                candidate = int(self._sample(target_logits[offset - 1]))
+                sampling_seconds += time.perf_counter() - sample_started
+                sampled_ids.append(candidate)
+                if candidate == eos:
+                    eos_hit = True
+                    break
+                if candidate != proposal[offset]:
+                    mismatch = candidate
+                    mismatch_offset = offset
+                    break
+                generated.append(candidate)
+                accepted += 1
+            speculative["accepted_tokens"] += accepted
+            speculative["accepted_length_total"] += accepted
+
+            if eos_hit:
+                if base_position is None:
+                    raise RuntimeError("speculative rollback requires a native position")
+                self._truncate_cache(base_position + accepted)
+                self._commit_verified(proposal[:accepted])
+                decode_evaluated += accepted
+                break
+            if mismatch is not None:
+                if base_position is None:
+                    raise RuntimeError("speculative rollback requires a native position")
+                self._truncate_cache(base_position + accepted)
+                self._commit_verified(proposal[:accepted])
+                generated.append(mismatch)
+                native_started = time.perf_counter()
+                logits = self._eval_and_commit([mismatch])
+                native_generation_seconds += time.perf_counter() - native_started
+                decode_evaluated += accepted + 1
+                index += int(mismatch_offset) + 1
+                continue
+
+            self._commit_verified(proposal)
+            logits = target_logits[3]
+            decode_evaluated += 4
+            index += 4
+        blocks = speculative["proposed_blocks"]
+        speculative["mean_accepted_length"] = (speculative["accepted_length_total"] / blocks
+                                                  if blocks else 0.0)
+        return (generated, sampled_ids, decode_evaluated, native_generation_seconds,
+                sampling_seconds, speculative)
     def _stats_snapshot(self):
         if bool(getattr(self.runtime, "stats_abi_incompatible", False)):
             raise NativeError("native runtime exposes CPU-R4 shared-K symbols with an incompatible statistics ABI; rebuild the DLL")
@@ -273,19 +408,11 @@ class ChatSession:
                 pending = ids; lcp = 0
         prefill_started = time.perf_counter(); logits = self._eval_and_commit(pending); ttft = time.perf_counter() - prefill_started
         prefill_stats = self._stats_snapshot()
-        generated = []; sampled_ids = []; eos = int(getattr(self.tokenizer, "eos_token_id", 2) or 2)
-        sampling_seconds = 0.0; native_generation_seconds = 0.0; decode_evaluated = 0
+        eos = int(getattr(self.tokenizer, "eos_token_id", 2) or 2)
         set_phase and set_phase("decode")
         decode_started = time.perf_counter()
-        for index in range(self.max_new_tokens):
-            sample_started = time.perf_counter()
-            token = self._sample(logits)
-            sampling_seconds += time.perf_counter() - sample_started
-            sampled_ids.append(int(token))
-            if token == eos: break
-            generated.append(token)
-            if index + 1 < self.max_new_tokens:
-                native_started = time.perf_counter(); logits = self._eval_and_commit([token]); native_generation_seconds += time.perf_counter() - native_started; decode_evaluated += 1
+        (generated, sampled_ids, decode_evaluated, native_generation_seconds,
+         sampling_seconds, speculative) = self._decode_tokens(logits, eos)
         decode = time.perf_counter() - decode_started; text = self.tokenizer.decode(generated, skip_special_tokens=True)
         position_after = self._position()
         native_stats = self._stats_snapshot() or {}
@@ -306,7 +433,8 @@ class ChatSession:
                    "native_generation_seconds": native_generation_seconds,
                    "sampling_seconds": sampling_seconds, "total_seconds": total,
                    "sampled_ids": sampled_ids, "native": native_stats,
-                   "native_phase_stats": native_phase_stats}
+                   "native_phase_stats": native_phase_stats,
+                   "speculative_decode": speculative}
         response = ChatResponse(text, len(generated), len(ids), ttft, decode, self.runtime.backend,
                             len(ids), lcp, len(pending), decode_evaluated, lm_heads, position_before, position_after,
                             cache_action, prepare_seconds, ttft, native_generation_seconds,

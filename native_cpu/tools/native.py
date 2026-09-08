@@ -244,6 +244,9 @@ class NativeRuntime:
     @property
     def supports_truncate(self): return self._truncate is not None
 
+    @property
+    def supports_verify_x4(self): return self._verify_x4 is not None
+
     def truncate(self, position):
         self._check()
         try: position = operator.index(position)

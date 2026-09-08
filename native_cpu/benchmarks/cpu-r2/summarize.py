@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import statistics
 from pathlib import Path
 from typing import Any
@@ -164,6 +165,26 @@ def summarize(rows):
     }
 
 
+def _checked_metric_rows(rows, metric: str):
+    values = metric_rows_from(rows, metric)
+    if any(not isinstance(value, (int, float)) or not math.isfinite(float(value))
+           for row in values for value in row[2:6]):
+        raise ValueError(f"non-finite {metric} value")
+    if metric in ("native_generation_seconds", "decode_tokens_per_second") and any(row[2] <= 0 or row[3] <= 0 for row in values):
+        raise ValueError(f"non-positive {metric} value")
+    return values
+
+
+def _checked_attention_rows(rows, phase: str):
+    values = attention_rows_from(rows, phase)
+    if any(not isinstance(value, (int, float)) or not math.isfinite(float(value))
+           for row in values for value in row[2:6]):
+        raise ValueError(f"non-finite attention {phase} value")
+    if any(row[2] < 0 or row[3] < 0 for row in values):
+        raise ValueError(f"negative attention {phase} value")
+    return values
+
+
 def table(rows, unit: str):
     lines = [
         "| Pair | Order | V0 reference | V1 blocked | V1-V0 | Benefit | Parity |",
@@ -210,7 +231,8 @@ def evaluate(summary: dict[str, Any], out: Path = OUT) -> dict[str, Any]:
         attention_case_rows = rows_by_case.get(f"cpu-r2-diagnostics-V0-V1-{length}", [])
         if len(speed_rows) == PAIR_COUNT:
             try:
-                speed = metric_rows_from(speed_rows, "native_generation_seconds")
+                speed = _checked_metric_rows(speed_rows, "native_generation_seconds")
+                _checked_metric_rows(speed_rows, "decode_tokens_per_second")
                 speed_summary = summarize(speed)
                 if not speed_summary["all_improved"]:
                     reasons.append(f"decode speed regression at {length}")
@@ -220,7 +242,8 @@ def evaluate(summary: dict[str, Any], out: Path = OUT) -> dict[str, Any]:
                 reasons.append(f"invalid decode speed evidence at {length}: {exc}")
         if len(attention_case_rows) == PAIR_COUNT:
             try:
-                attention = attention_rows_from(attention_case_rows, "decode")
+                _checked_attention_rows(attention_case_rows, "prefill")
+                attention = _checked_attention_rows(attention_case_rows, "decode")
                 if not summarize(attention)["all_improved"]:
                     reasons.append(f"attention diagnostic regression at {length}")
             except (KeyError, TypeError, ValueError) as exc:
@@ -231,7 +254,7 @@ def evaluate(summary: dict[str, Any], out: Path = OUT) -> dict[str, Any]:
 def _summary_line(rows, label, metric, unit):
     if len(rows) != PAIR_COUNT:
         return f"| {label} | {metric} | unavailable | unavailable | unavailable | unavailable | unavailable | False |"
-    values = metric_rows_from(rows, metric)
+    values = _checked_metric_rows(rows, metric)
     s = summarize(values)
     if metric == "decode_tokens_per_second":
         deltas = [r[3] - r[2] for r in values]
@@ -269,6 +292,17 @@ def render_report(summary: dict[str, Any], evaluation: dict[str, Any], report_pa
             lines.append(f"Chat token/text parity: `native_cpu/benchmarks/cpu-r2/chat-parity.json` = `{chat['status']}` for the historical six-turn conversation under CPU-R1 flags plus CPU 0 pinning.")
         except (OSError, json.JSONDecodeError, KeyError):
             lines.append("Chat token/text parity: unavailable (invalid chat-parity.json).")
+    # Never touch metric-dependent tables after an invalid evaluation.  This
+    # replaces any previous report with a fail-closed rejection instead of
+    # allowing a rendering exception to leave stale `accepted` evidence.
+    if not ok:
+        lines += [
+            "",
+            "## Acceptance check",
+            "Result: **REJECT** — " + ", ".join(evaluation["reasons"]),
+        ]
+        Path(report_path).write_text("\n".join(lines) + "\n", encoding="utf8")
+        return
     lines += [
         "",
         "## Summary",
@@ -283,7 +317,7 @@ def render_report(summary: dict[str, Any], evaluation: dict[str, Any], report_pa
         for phase in ("prefill", "decode"):
             rows = rows_by_case.get(diagnostic_key, [])
             if len(rows) == PAIR_COUNT:
-                values = attention_rows_from(rows, phase)
+                values = _checked_attention_rows(rows, phase)
                 s = summarize(values)
                 lines.append(f"| diagnostics {length} | attention_{phase}_ms | {s['left_median']:.6f} ms | {s['right_median']:.6f} ms | {s['delta_median']:.6f} ms | {s['delta_stdev']:.6f} | {s['benefit_median_percent']:.3f}% | {s['all_improved']} |")
             else:
@@ -292,14 +326,14 @@ def render_report(summary: dict[str, Any], evaluation: dict[str, Any], report_pa
     for length in (256, 1792):
         lines.append(f"### Prefix {length}: native decode/generation seconds")
         rows = rows_by_case.get(f"cpu-r2-speed-V0-V1-{length}", [])
-        lines.append(table(metric_rows_from(rows, "native_generation_seconds"), "s") if len(rows) == PAIR_COUNT else "Evidence unavailable: incomplete pair set.")
+        lines.append(table(_checked_metric_rows(rows, "native_generation_seconds"), "s") if len(rows) == PAIR_COUNT else "Evidence unavailable: incomplete pair set.")
         lines.append("")
     lines.append("## Paired diagnostic attention details")
     for length in (256, 1792):
         for phase in ("prefill", "decode"):
             lines.append(f"### Prefix {length}: attention {phase}")
             rows = rows_by_case.get(f"cpu-r2-diagnostics-V0-V1-{length}", [])
-            lines.append(table(attention_rows_from(rows, phase), "ms") if len(rows) == PAIR_COUNT else "Evidence unavailable: incomplete pair set.")
+            lines.append(table(_checked_attention_rows(rows, phase), "ms") if len(rows) == PAIR_COUNT else "Evidence unavailable: incomplete pair set.")
             lines.append("")
     lines += ["## Acceptance check", f"Result: **{'PASS' if ok else 'REJECT'}**" + (f" — {', '.join(evaluation['reasons'])}" if evaluation["reasons"] else ".")]
     Path(report_path).write_text("\n".join(lines) + "\n", encoding="utf8")

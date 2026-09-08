@@ -119,3 +119,23 @@ def test_missing_pair_rejects_and_returns_nonzero(tmp_path):
     text = report.read_text(encoding="utf8")
     assert "Status: **accepted**" not in text
     assert "missing evidence" in text
+
+
+def test_invalid_metric_replaces_existing_accepted_report(tmp_path):
+    out = _fixture(tmp_path)
+    report = tmp_path / "RESULTS.md"
+    assert summarize.main(out=out, report_path=report) == 0
+    assert "Status: **accepted**" in report.read_text(encoding="utf8")
+
+    path = out / "cpu-r2-speed-V0-V1-256-pair01.json"
+    record = json.loads(path.read_text(encoding="utf8"))
+    v0 = next(entry for entry in record["entries"] if entry["profile"] == "V0")
+    del v0["native_generation_seconds"]
+    path.write_text(json.dumps(record), encoding="utf8")
+
+    assert summarize.main(out=out, report_path=report) != 0
+    text = report.read_text(encoding="utf8")
+    assert "Status: **rejected**" in text
+    assert "Status: **accepted**" not in text
+    assert "Result: **REJECT**" in text
+    assert "invalid decode speed evidence" in text

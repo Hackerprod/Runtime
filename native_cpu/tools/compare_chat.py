@@ -143,6 +143,13 @@ def build_session(args):
 
 def response_metrics(args, result, counted, loading_seconds):
     threads, cpus, row_weights = _thread_values(counted)
+    decode_seconds = float(result.decode_seconds)
+    generated_tokens = int(result.generated_tokens)
+    target_tokens = int(counted.decode_evaluated_tokens)
+    output_tokens_per_second = (generated_tokens / decode_seconds
+                                if generated_tokens and decode_seconds > 0 else None)
+    target_tokens_per_second = (target_tokens / decode_seconds
+                                if target_tokens and decode_seconds > 0 else None)
     return {"backend": args.backend, "profile": args.profile, "system": args.system, "runtime_backend": result.backend,
             "dtype": "float32", "threads": threads, "cpus": cpus,
             "row_weights": row_weights, "flash_attn": False if args.backend == "original" else None,
@@ -171,7 +178,13 @@ def response_metrics(args, result, counted, loading_seconds):
             "ffn_f16_storage": bool(getattr(args, "ffn_f16_storage", False)),
             "gqa_k_shared": bool(getattr(args, "gqa_k_shared", False)),
             "gqa_v_shared": bool(getattr(args, "gqa_v_shared", False)),
-            "decode_tokens_per_second": counted.decode_evaluated_tokens / result.decode_seconds if counted.decode_evaluated_tokens and result.decode_seconds > 0 else None,
+            # The public rate is output throughput: every generated token counts,
+            # including tokens accepted by speculative verification.  Keep the
+            # target-evaluation rate separate because verify_x4 does not pass
+            # through CountedRuntime.eval().
+            "output_tokens_per_second": output_tokens_per_second,
+            "target_tokens_per_second": target_tokens_per_second,
+            "decode_tokens_per_second": output_tokens_per_second,
             "finish_reason": "eos" if result.generated_tokens < args.max_new_tokens else "length"}
 
 
@@ -187,8 +200,15 @@ def _thread_values(counted):
 def _print_result(metrics, as_json):
     if as_json: print(json.dumps(metrics, ensure_ascii=False, allow_nan=False), flush=True)
     else:
-        print(metrics["text"], flush=True); rate = metrics["decode_tokens_per_second"]; rate_text = f"{rate:.2f}" if rate is not None else "n/a"
-        print(f"[prefill={metrics['prefill_seconds']:.3f}s decode={metrics['decode_seconds']:.3f}s decode_tok/s={rate_text} eval_steps={metrics['decode_eval_steps']} finish={metrics['finish_reason']}]", file=sys.stderr, flush=True)
+        print(metrics["text"], flush=True)
+        rate = metrics["decode_tokens_per_second"]
+        target_rate = metrics.get("target_tokens_per_second")
+        rate_text = f"{rate:.2f}" if rate is not None else "n/a"
+        target_text = f"{target_rate:.2f}" if target_rate is not None else "n/a"
+        print(f"[prefill={metrics['prefill_seconds']:.3f}s decode={metrics['decode_seconds']:.3f}s "
+              f"decode_tok/s={rate_text} target_tok/s={target_text} "
+              f"eval_steps={metrics['decode_eval_steps']} finish={metrics['finish_reason']}]",
+              file=sys.stderr, flush=True)
 
 def make_parser():
     parser = argparse.ArgumentParser(description=__doc__); parser.add_argument("--backend", choices=("native", "original"), default="native")

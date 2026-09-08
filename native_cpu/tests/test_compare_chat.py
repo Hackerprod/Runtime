@@ -143,14 +143,36 @@ class CompareMetricsTests(unittest.TestCase):
         args = parser_args()
         result = SimpleNamespace(text="¡Qué tal!", generated_tokens=2, context_tokens=7,
                                  ttft_seconds=0.1, decode_seconds=0.2, backend="scalar")
-        counted = SimpleNamespace(decode_eval_steps=2, decode_evaluated_tokens=2)
+        counted = SimpleNamespace(decode_eval_steps=2, decode_evaluated_tokens=5)
         metrics = compare.response_metrics(args, result, counted, 0.3)
         self.assertEqual(metrics["text"], "¡Qué tal!")
         self.assertEqual(metrics["profile"], "chat")
         self.assertEqual(metrics["system"], compare.CHAT_SYSTEM)
-        self.assertEqual(metrics["decode_evaluated_tokens"], 2)
+        self.assertEqual(metrics["decode_evaluated_tokens"], 5)
         self.assertEqual(metrics["finish_reason"], "eos")
         self.assertAlmostEqual(metrics["decode_tokens_per_second"], 10.0)
+        self.assertAlmostEqual(metrics["output_tokens_per_second"], 10.0)
+        self.assertAlmostEqual(metrics["target_tokens_per_second"], 25.0)
+
+    def test_output_rate_counts_generated_tokens_not_target_evaluations(self):
+        args = parser_args()
+        result = SimpleNamespace(text="done", generated_tokens=4, context_tokens=7,
+                                 ttft_seconds=0.1, decode_seconds=0.5, backend="scalar")
+        counted = SimpleNamespace(decode_eval_steps=1, decode_evaluated_tokens=1)
+        metrics = compare.response_metrics(args, result, counted, 0.3)
+        self.assertEqual(metrics["decode_tokens_per_second"], 8.0)
+        self.assertEqual(metrics["output_tokens_per_second"], 8.0)
+        self.assertEqual(metrics["target_tokens_per_second"], 2.0)
+
+    def test_zero_decode_time_does_not_report_rates(self):
+        args = parser_args()
+        result = SimpleNamespace(text="", generated_tokens=0, context_tokens=7,
+                                 ttft_seconds=0.1, decode_seconds=0.0, backend="scalar")
+        counted = SimpleNamespace(decode_eval_steps=0, decode_evaluated_tokens=0)
+        metrics = compare.response_metrics(args, result, counted, 0.3)
+        self.assertIsNone(metrics["decode_tokens_per_second"])
+        self.assertIsNone(metrics["output_tokens_per_second"])
+        self.assertIsNone(metrics["target_tokens_per_second"])
 
     def test_print_result_preserves_unicode_json(self):
         metrics = {"text": "¡Hola!", "prefill_seconds": 0.1, "decode_seconds": 0.2,

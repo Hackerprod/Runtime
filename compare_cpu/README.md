@@ -73,6 +73,15 @@ model ended its answer. The original backend uses `flash_attn=False` to match
 the validated reference settings; it is not a claim about the fastest possible
 PyTorch configuration.
 
+## Canonical output-throughput guard
+
+`Canonical_TokS.cmd` runs three fresh CPU-E4 processes with the fixed prompt
+`Could you tell me about programming languages?` and the default chat sampling
+policy. It verifies the published CPU-E4 DLL SHA-256 before running and stores
+raw JSON and stderr receipts in `canonical-results/`. The displayed `output
+tok/s` counts generated output tokens; `legacy target tok/s` is the secondary
+native-evaluation rate retained for diagnosing older reports.
+
 ## Run the unmodified official web demo
 
 **This local launcher is not a replica of the public deployment.** On September

@@ -92,8 +92,14 @@ class MetricsRegressionTests(unittest.TestCase):
                                   metrics["decode_evaluated_tokens"], metrics["finish_reason"]),
                                  (generated, evaluated, evaluated, finish))
                 self.assertEqual(metrics["loading_seconds"], .5)
-                if not evaluated: self.assertIsNone(metrics["decode_tokens_per_second"])
-                else: self.assertAlmostEqual(metrics["decode_tokens_per_second"], evaluated / result.decode_seconds)
+                if not generated:
+                    self.assertIsNone(metrics["decode_tokens_per_second"])
+                else:
+                    self.assertAlmostEqual(metrics["decode_tokens_per_second"], generated / result.decode_seconds)
+                if not evaluated:
+                    self.assertIsNone(metrics["target_tokens_per_second"])
+                else:
+                    self.assertAlmostEqual(metrics["target_tokens_per_second"], evaluated / result.decode_seconds)
 
     def test_metrics_disclose_resolved_policy_and_backend(self):
         args = args_for(["--backend", "original", "--profile", "chat", "--max-new-tokens", "1"])

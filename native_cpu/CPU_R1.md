@@ -4,6 +4,9 @@ CPU-R1 keeps the dense MiniMind model, weights, tokenizer, chat template,
 sampling policy and FP32 accumulation kernels unchanged. The serial launcher
 remains the default; experimental behavior is opt-in.
 
+**Completed review package:** [Report for Sol, including exact runtime commits,
+results and limitations](benchmarks/cpu-r1/REPORT_FOR_SOL.md).
+
 ## Review sequence
 
 1. Explicit turn/phase accounting and optional native diagnostics.

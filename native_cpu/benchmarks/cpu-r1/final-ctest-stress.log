@@ -1,0 +1,45 @@
+Test project D:/Install/Dev/Projects/IA/Multi MoE/minimind/native_cpu/build
+    Start 1: mm_kernels
+    Test #1: mm_kernels .......................   Passed    0.14 sec
+    Start 1: mm_kernels
+    Test #1: mm_kernels .......................   Passed    0.01 sec
+    Start 1: mm_kernels
+    Test #1: mm_kernels .......................   Passed    0.01 sec
+    Start 1: mm_kernels
+    Test #1: mm_kernels .......................   Passed    0.01 sec
+    Start 1: mm_kernels
+    Test #1: mm_kernels .......................   Passed    0.01 sec
+    Start 1: mm_kernels
+    Test #1: mm_kernels .......................   Passed    0.02 sec
+    Start 1: mm_kernels
+    Test #1: mm_kernels .......................   Passed    0.01 sec
+    Start 1: mm_kernels
+    Test #1: mm_kernels .......................   Passed    0.01 sec
+    Start 1: mm_kernels
+    Test #1: mm_kernels .......................   Passed    0.01 sec
+    Start 1: mm_kernels
+1/2 Test #1: mm_kernels .......................   Passed    0.01 sec
+    Start 2: mm_runtime
+    Test #2: mm_runtime .......................   Passed    0.38 sec
+    Start 2: mm_runtime
+    Test #2: mm_runtime .......................   Passed    0.33 sec
+    Start 2: mm_runtime
+    Test #2: mm_runtime .......................   Passed    0.33 sec
+    Start 2: mm_runtime
+    Test #2: mm_runtime .......................   Passed    0.32 sec
+    Start 2: mm_runtime
+    Test #2: mm_runtime .......................   Passed    0.35 sec
+    Start 2: mm_runtime
+    Test #2: mm_runtime .......................   Passed    0.34 sec
+    Start 2: mm_runtime
+    Test #2: mm_runtime .......................   Passed    0.33 sec
+    Start 2: mm_runtime
+    Test #2: mm_runtime .......................   Passed    0.33 sec
+    Start 2: mm_runtime
+    Test #2: mm_runtime .......................   Passed    0.33 sec
+    Start 2: mm_runtime
+2/2 Test #2: mm_runtime .......................   Passed    0.32 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   4.00 sec

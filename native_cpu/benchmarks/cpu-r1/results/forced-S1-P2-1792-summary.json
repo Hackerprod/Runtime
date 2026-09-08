@@ -1,0 +1,242 @@
+{
+  "case": {
+    "key": "forced-S1-P2-1792",
+    "family": "forced",
+    "left": "S1",
+    "right": "P2",
+    "workload": "forced",
+    "length": 1792
+  },
+  "pairs": 6,
+  "parity": true,
+  "profiles": {
+    "S1": {
+      "prefill_seconds": {
+        "count": 6,
+        "median": 25.02562189998571,
+        "min": 24.752795200096443,
+        "max": 25.211073799990118,
+        "stdev": 0.20250933469127785
+      },
+      "native_generation_seconds": {
+        "count": 6,
+        "median": 0.7405749998288229,
+        "min": 0.7310797006357461,
+        "max": 0.7507176001090556,
+        "stdev": 0.007796442331111442
+      },
+      "native_seconds": {
+        "count": 6,
+        "median": 25.76619689981453,
+        "min": 25.48387490073219,
+        "max": 25.959354799473658,
+        "stdev": 0.2099626831026987
+      },
+      "total_seconds": {
+        "count": 6,
+        "median": 25.76619689981453,
+        "min": 25.48387490073219,
+        "max": 25.959354799473658,
+        "stdev": 0.2099626831026987
+      },
+      "prefill_tokens_evaluated": {
+        "count": 6,
+        "median": 1792.0,
+        "min": 1792,
+        "max": 1792,
+        "stdev": 0.0
+      },
+      "decode_tokens_evaluated": {
+        "count": 6,
+        "median": 32.0,
+        "min": 32,
+        "max": 32,
+        "stdev": 0.0
+      },
+      "decode_tokens_per_second": {
+        "count": 6,
+        "median": 43.210024810234515,
+        "min": 42.62588221636393,
+        "max": 43.770877473650046,
+        "stdev": 0.4544195749012261
+      },
+      "prefill_tokens_per_second": {
+        "count": 6,
+        "median": 71.60870359822636,
+        "min": 71.0798760186368,
+        "max": 72.39586420498554,
+        "stdev": 0.58073926701656
+      }
+    },
+    "P2": {
+      "prefill_seconds": {
+        "count": 6,
+        "median": 24.053457700065337,
+        "min": 23.77019609999843,
+        "max": 24.2429148000665,
+        "stdev": 0.1806425373475683
+      },
+      "native_generation_seconds": {
+        "count": 6,
+        "median": 0.7135095000267029,
+        "min": 0.7027387009002268,
+        "max": 0.7342667006887496,
+        "stdev": 0.012826053963546712
+      },
+      "native_seconds": {
+        "count": 6,
+        "median": 24.775844000279903,
+        "min": 24.50162009894848,
+        "max": 24.959427900379524,
+        "stdev": 0.17900990914781134
+      },
+      "total_seconds": {
+        "count": 6,
+        "median": 24.775844000279903,
+        "min": 24.50162009894848,
+        "max": 24.959427900379524,
+        "stdev": 0.17900990914781134
+      },
+      "prefill_tokens_evaluated": {
+        "count": 6,
+        "median": 1792.0,
+        "min": 1792,
+        "max": 1792,
+        "stdev": 0.0
+      },
+      "decode_tokens_evaluated": {
+        "count": 6,
+        "median": 32.0,
+        "min": 32,
+        "max": 32,
+        "stdev": 0.0
+      },
+      "decode_tokens_per_second": {
+        "count": 6,
+        "median": 44.84953189315482,
+        "min": 43.58089502081965,
+        "max": 45.536128804358086,
+        "stdev": 0.793202819395882
+      },
+      "prefill_tokens_per_second": {
+        "count": 6,
+        "median": 74.50114207903806,
+        "min": 73.91850422190505,
+        "max": 75.38852403494131,
+        "stdev": 0.5614954270575981
+      }
+    }
+  },
+  "paired_differences": [
+    {
+      "pair": 1,
+      "right_minus_left": {
+        "prefill_seconds": -0.9561731999274343,
+        "native_generation_seconds": -0.034204499796032906,
+        "native_seconds": -0.9903776997234672,
+        "total_seconds": -0.9903776997234672,
+        "prefill_tokens_evaluated": 0,
+        "decode_tokens_evaluated": 0,
+        "decode_tokens_per_second": 2.0348504150704088,
+        "prefill_tokens_per_second": 2.804819472662089
+      },
+      "total_time_reduction": 0.038165129827390176
+    },
+    {
+      "pair": 2,
+      "right_minus_left": {
+        "prefill_seconds": -0.7393941998016089,
+        "native_generation_seconds": 0.000248500844463706,
+        "native_seconds": -0.7391456989571452,
+        "total_seconds": -0.7391456989571452,
+        "prefill_tokens_evaluated": 0,
+        "decode_tokens_evaluated": 0,
+        "decode_tokens_per_second": -0.014754251621354797,
+        "prefill_tokens_per_second": 2.2114857189965846
+      },
+      "total_time_reduction": 0.028891061839258714
+    },
+    {
+      "pair": 3,
+      "right_minus_left": {
+        "prefill_seconds": -0.893934499938041,
+        "native_generation_seconds": -0.02794150006957352,
+        "native_seconds": -0.9218760000076145,
+        "total_seconds": -0.9218760000076145,
+        "prefill_tokens_evaluated": 0,
+        "decode_tokens_evaluated": 0,
+        "decode_tokens_per_second": 1.7041681417272088,
+        "prefill_tokens_per_second": 2.682041379122495
+      },
+      "total_time_reduction": 0.03597028461153495
+    },
+    {
+      "pair": 4,
+      "right_minus_left": {
+        "prefill_seconds": -0.9651012998074293,
+        "native_generation_seconds": -0.03414209955371916,
+        "native_seconds": -0.9992433993611485,
+        "total_seconds": -0.9992433993611485,
+        "prefill_tokens_evaluated": 0,
+        "decode_tokens_evaluated": 0,
+        "decode_tokens_per_second": 2.076100247328341,
+        "prefill_tokens_per_second": 2.840833854401893
+      },
+      "total_time_reduction": 0.038575505491522555
+    },
+    {
+      "pair": 5,
+      "right_minus_left": {
+        "prefill_seconds": -1.4408776999916881,
+        "native_generation_seconds": -0.016857000533491373,
+        "native_seconds": -1.4577347005251795,
+        "total_seconds": -1.4577347005251795,
+        "prefill_tokens_evaluated": 0,
+        "decode_tokens_evaluated": 0,
+        "decode_tokens_per_second": 0.9855901516580374,
+        "prefill_tokens_per_second": 4.308648016304517
+      },
+      "total_time_reduction": 0.056154504292793006
+    },
+    {
+      "pair": 6,
+      "right_minus_left": {
+        "prefill_seconds": -0.8474091000389308,
+        "native_generation_seconds": -0.02834099973551929,
+        "native_seconds": -0.8757500997744501,
+        "total_seconds": -0.8757500997744501,
+        "prefill_tokens_evaluated": 0,
+        "decode_tokens_evaluated": 0,
+        "decode_tokens_per_second": 1.7652513307080397,
+        "prefill_tokens_per_second": 2.566321827043808
+      },
+      "total_time_reduction": 0.03436487202930383
+    }
+  ],
+  "order": [
+    [
+      "S1",
+      "P2"
+    ],
+    [
+      "P2",
+      "S1"
+    ],
+    [
+      "S1",
+      "P2"
+    ],
+    [
+      "P2",
+      "S1"
+    ],
+    [
+      "S1",
+      "P2"
+    ],
+    [
+      "P2",
+      "S1"
+    ]
+  ]
+}

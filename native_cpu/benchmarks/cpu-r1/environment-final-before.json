@@ -1,0 +1,165 @@
+{
+  "utc": "2026-09-08T01:40:09Z",
+  "system_cpu_percent": 21.4,
+  "power": {
+    "ac_line": 1,
+    "battery_percent": 100
+  },
+  "power_scheme_guid": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "processor": "AMD Ryzen AI 5 330 w/ Radeon 820M",
+  "cores": [
+    {
+      "efficiency_class": 1,
+      "groups": [
+        {
+          "group": 0,
+          "logical_cpus": [
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "efficiency_class": 0,
+      "groups": [
+        {
+          "group": 0,
+          "logical_cpus": [
+            2,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "efficiency_class": 0,
+      "groups": [
+        {
+          "group": 0,
+          "logical_cpus": [
+            4,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "efficiency_class": 0,
+      "groups": [
+        {
+          "group": 0,
+          "logical_cpus": [
+            6,
+            7
+          ]
+        }
+      ]
+    }
+  ],
+  "topology_source": "GetLogicalProcessorInformationEx(RelationProcessorCore)",
+  "selected_profiles": {
+    "R0": {
+      "selective_logits": false,
+      "reuse_kv": false,
+      "threads": 1,
+      "cpus": [
+        0
+      ],
+      "row_weights": [
+        1
+      ]
+    },
+    "R1": {
+      "selective_logits": true,
+      "reuse_kv": false,
+      "threads": 1,
+      "cpus": [
+        0
+      ],
+      "row_weights": [
+        1
+      ]
+    },
+    "R2": {
+      "selective_logits": false,
+      "reuse_kv": true,
+      "threads": 1,
+      "cpus": [
+        0
+      ],
+      "row_weights": [
+        1
+      ]
+    },
+    "R3": {
+      "selective_logits": true,
+      "reuse_kv": true,
+      "threads": 1,
+      "cpus": [
+        0
+      ],
+      "row_weights": [
+        1
+      ]
+    },
+    "S0": {
+      "selective_logits": true,
+      "reuse_kv": true,
+      "threads": 1,
+      "cpus": null,
+      "row_weights": [
+        1
+      ]
+    },
+    "S1": {
+      "selective_logits": true,
+      "reuse_kv": true,
+      "threads": 1,
+      "cpus": [
+        0
+      ],
+      "row_weights": [
+        1
+      ]
+    },
+    "P2": {
+      "selective_logits": true,
+      "reuse_kv": true,
+      "threads": 2,
+      "cpus": [
+        0,
+        6
+      ],
+      "row_weights": [
+        1332,
+        992
+      ]
+    },
+    "P4": {
+      "selective_logits": true,
+      "reuse_kv": true,
+      "threads": 4,
+      "cpus": [
+        0,
+        2,
+        4,
+        6
+      ],
+      "row_weights": [
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "physical_cpu_count": 4,
+  "logical_cpu_count": 8,
+  "memory_total_bytes": 16233910272,
+  "limitations": [
+    "No temperature, energy, cache-miss or actual memory-traffic counters.",
+    "Desktop activity is observed, not controlled; no unrelated processes terminated."
+  ]
+}

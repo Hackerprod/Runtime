@@ -1,0 +1,146 @@
+{
+  "identity": {
+    "schema": "cpu-u1.2/single-baseline-v1",
+    "source_commit": "06694632cfe4ee5b97013d6a5b2e6fec9fe98f50",
+    "measurement_tree_commit": "d06f89f10c3c3e57e90fe00579dcdc2f56dc1326",
+    "library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\benchmarks\\cpu-u1.2\\baseline\\minimind_cpu.dll",
+    "library_sha256": "5956ff064ad8e8fd1ff502d18626ce19240682faa55c584cb3d6eaad1775bb3a",
+    "build_info_sha256": "8dd097707ddb6bd4922bace1572a3dfb8c2f92141634e00e55746703bf927d69",
+    "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+    "tokenizer_sha256": {
+      "tokenizer.json": "71f32c68cf63a15355a8fc171b7594b3d41870fe0ddb54fc6aefa55f73a4a668",
+      "tokenizer_config.json": "04ae7620b9cf93fd2d6fbf94936b0c3c4be65f30cd6ef6fa8741baac986525d1",
+      "chat_template.jinja": "97c6a9ef3f8d35044f435bb7773f1af160a7328ab6e8d2e9d67702941320a711"
+    },
+    "build": {
+      "type": "Release",
+      "compiler": {
+        "id": "MSVC",
+        "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+        "version": "19.50.35727.0"
+      },
+      "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /EHsc /fp:precise /std:c++20",
+      "generator": "Visual Studio 18 2026",
+      "cmake": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe"
+    },
+    "threads": 1,
+    "cpus": [
+      0
+    ],
+    "row_weights": [
+      1
+    ],
+    "profiler": false,
+    "runtime_route": "CPU-U1 automatic production route; no launcher switches",
+    "repeat_count": 3,
+    "prefix_lengths": [
+      256,
+      1792
+    ],
+    "continuation": 32
+  },
+  "cases": [
+    {
+      "identity": {
+        "schema": "cpu-u1.2/single-baseline-v1",
+        "source_commit": "06694632cfe4ee5b97013d6a5b2e6fec9fe98f50",
+        "measurement_tree_commit": "d06f89f10c3c3e57e90fe00579dcdc2f56dc1326",
+        "library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\benchmarks\\cpu-u1.2\\baseline\\minimind_cpu.dll",
+        "library_sha256": "5956ff064ad8e8fd1ff502d18626ce19240682faa55c584cb3d6eaad1775bb3a",
+        "build_info_sha256": "8dd097707ddb6bd4922bace1572a3dfb8c2f92141634e00e55746703bf927d69",
+        "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+        "tokenizer_sha256": {
+          "tokenizer.json": "71f32c68cf63a15355a8fc171b7594b3d41870fe0ddb54fc6aefa55f73a4a668",
+          "tokenizer_config.json": "04ae7620b9cf93fd2d6fbf94936b0c3c4be65f30cd6ef6fa8741baac986525d1",
+          "chat_template.jinja": "97c6a9ef3f8d35044f435bb7773f1af160a7328ab6e8d2e9d67702941320a711"
+        },
+        "build": {
+          "type": "Release",
+          "compiler": {
+            "id": "MSVC",
+            "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+            "version": "19.50.35727.0"
+          },
+          "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /EHsc /fp:precise /std:c++20",
+          "generator": "Visual Studio 18 2026",
+          "cmake": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe"
+        },
+        "threads": 1,
+        "cpus": [
+          0
+        ],
+        "row_weights": [
+          1
+        ],
+        "profiler": false,
+        "runtime_route": "CPU-U1 automatic production route; no launcher switches",
+        "repeat_count": 3,
+        "prefix_lengths": [
+          256,
+          1792
+        ],
+        "continuation": 32
+      },
+      "case": {
+        "key": "cpu-u1.2-forced-256",
+        "workload": "forced",
+        "length": 256
+      },
+      "repetitions": 3,
+      "output_parity": true,
+      "status": "PASS"
+    },
+    {
+      "identity": {
+        "schema": "cpu-u1.2/single-baseline-v1",
+        "source_commit": "06694632cfe4ee5b97013d6a5b2e6fec9fe98f50",
+        "measurement_tree_commit": "d06f89f10c3c3e57e90fe00579dcdc2f56dc1326",
+        "library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\benchmarks\\cpu-u1.2\\baseline\\minimind_cpu.dll",
+        "library_sha256": "5956ff064ad8e8fd1ff502d18626ce19240682faa55c584cb3d6eaad1775bb3a",
+        "build_info_sha256": "8dd097707ddb6bd4922bace1572a3dfb8c2f92141634e00e55746703bf927d69",
+        "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+        "tokenizer_sha256": {
+          "tokenizer.json": "71f32c68cf63a15355a8fc171b7594b3d41870fe0ddb54fc6aefa55f73a4a668",
+          "tokenizer_config.json": "04ae7620b9cf93fd2d6fbf94936b0c3c4be65f30cd6ef6fa8741baac986525d1",
+          "chat_template.jinja": "97c6a9ef3f8d35044f435bb7773f1af160a7328ab6e8d2e9d67702941320a711"
+        },
+        "build": {
+          "type": "Release",
+          "compiler": {
+            "id": "MSVC",
+            "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+            "version": "19.50.35727.0"
+          },
+          "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /EHsc /fp:precise /std:c++20",
+          "generator": "Visual Studio 18 2026",
+          "cmake": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe"
+        },
+        "threads": 1,
+        "cpus": [
+          0
+        ],
+        "row_weights": [
+          1
+        ],
+        "profiler": false,
+        "runtime_route": "CPU-U1 automatic production route; no launcher switches",
+        "repeat_count": 3,
+        "prefix_lengths": [
+          256,
+          1792
+        ],
+        "continuation": 32
+      },
+      "case": {
+        "key": "cpu-u1.2-forced-1792",
+        "workload": "forced",
+        "length": 1792
+      },
+      "repetitions": 3,
+      "output_parity": true,
+      "status": "PASS"
+    }
+  ],
+  "status": "PASS",
+  "final_protocol": true
+}

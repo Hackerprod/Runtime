@@ -59,6 +59,32 @@ struct LayerWeights {
     const Tensor* down_proj = nullptr;
 };
 
+// Scratch owned by one position while a four-token prefill block advances
+// layer by layer.  Keeping one lane per token preserves causal KV writes while
+// allowing the FFN projections to consume four independent inputs together.
+struct PrefillState {
+    std::vector<float> hidden, residual, normed, projection;
+    std::vector<float> q, k, v, q_rot, k_rot, attention;
+    std::vector<float> intermediate, ffn_up, logits, scores;
+
+    void resize(const Config& config, uint32_t max_context) {
+        hidden.resize(config.hidden);
+        residual.resize(config.hidden);
+        normed.resize(config.hidden);
+        projection.resize(config.hidden);
+        q.resize(static_cast<size_t>(config.q_heads) * config.head_dim);
+        k.resize(static_cast<size_t>(config.kv_heads) * config.head_dim);
+        v.resize(static_cast<size_t>(config.kv_heads) * config.head_dim);
+        q_rot.resize(q.size());
+        k_rot.resize(k.size());
+        attention.resize(q.size());
+        intermediate.resize(config.intermediate);
+        ffn_up.resize(config.intermediate);
+        logits.resize(config.vocab);
+        scores.resize(static_cast<size_t>(config.q_heads) * max_context);
+    }
+};
+
 struct Expected {
     std::vector<uint32_t> shape;
     bool embedding = false;
@@ -333,6 +359,8 @@ struct Runtime {
     std::vector<float> q, k, v, q_rot, k_rot, attention;
     std::vector<float> intermediate, ffn_up, logits, scores;
     std::vector<float> rope_cos, rope_sin;
+    std::array<PrefillState, 4> prefill_states;
+    bool prefill_x4_ready = false;
 
     bool prepare_ffn_f16_storage() {
         if (!mm::f16c_available()) return false;
@@ -453,6 +481,8 @@ struct Runtime {
             ffn_f16_prepare_ns = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - started).count());
             ffn_f16_storage = true;
+            for (PrefillState& state : prefill_states) state.resize(config, max_context);
+            prefill_x4_ready = true;
         }
     }
 
@@ -523,6 +553,278 @@ struct Runtime {
                 k_rot[base + i + config.head_dim / 2] = second * c + first * s;
             }
         }
+    }
+
+    void rotate(PrefillState& state, uint32_t pos) {
+        const size_t rope_base = static_cast<size_t>(pos) * (config.head_dim / 2);
+        for (uint32_t h = 0; h < config.q_heads; ++h) {
+            const size_t base = static_cast<size_t>(h) * config.head_dim;
+            for (uint32_t i = 0; i < config.head_dim / 2; ++i) {
+                const float c = rope_cos[rope_base + i], s = rope_sin[rope_base + i];
+                const float first = state.q[base + i], second = state.q[base + i + config.head_dim / 2];
+                state.q_rot[base + i] = first * c - second * s;
+                state.q_rot[base + i + config.head_dim / 2] = second * c + first * s;
+            }
+        }
+        for (uint32_t h = 0; h < config.kv_heads; ++h) {
+            const size_t base = static_cast<size_t>(h) * config.head_dim;
+            for (uint32_t i = 0; i < config.head_dim / 2; ++i) {
+                const float c = rope_cos[rope_base + i], s = rope_sin[rope_base + i];
+                const float first = state.k[base + i], second = state.k[base + i + config.head_dim / 2];
+                state.k_rot[base + i] = first * c - second * s;
+                state.k_rot[base + i + config.head_dim / 2] = second * c + first * s;
+            }
+        }
+    }
+
+    void gemv_x4(const Tensor& weight,
+                 const float* x0, float* y0,
+                 const float* x1, float* y1,
+                 const float* x2, float* y2,
+                 const float* x3, float* y3) {
+        const uint32_t rows = static_cast<uint32_t>(weight.rows());
+        const uint32_t cols = static_cast<uint32_t>(weight.cols());
+        if (!(weight.dtype == 0 && ffn_f16_storage && weight.f16.size() == weight.f32.size())) {
+            gemv(weight, x0, y0, ProfileOp::Ffn, true, true);
+            gemv(weight, x1, y1, ProfileOp::Ffn, true, true);
+            gemv(weight, x2, y2, ProfileOp::Ffn, true, true);
+            gemv(weight, x3, y3, ProfileOp::Ffn, true, true);
+            return;
+        }
+        const auto started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        parallel.gemv_f16_x4(weight.f16.data(), x0, y0, x1, y1, x2, y2, x3, y3,
+                             rows, cols, kernel_mode);
+        if (profile_enabled) {
+            stats.ffn_calls += 4;
+            stats.ffn_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - started).count());
+        }
+    }
+
+    void process_prefill_attention(PrefillState& state, const LayerWeights& w,
+                                   uint32_t layer, uint32_t pos, bool emit_logits) {
+        std::copy(state.hidden.begin(), state.hidden.end(), state.residual.begin());
+        rms_norm(state.hidden, *w.input_norm, config.rms_eps, state.normed);
+        gemv(*w.q_proj, state.normed.data(), state.q.data(), ProfileOp::Qkv);
+        gemv(*w.k_proj, state.normed.data(), state.k.data(), ProfileOp::Qkv);
+        gemv(*w.v_proj, state.normed.data(), state.v.data(), ProfileOp::Qkv);
+        for (uint32_t h = 0; h < config.q_heads; ++h) {
+            const size_t base = static_cast<size_t>(h) * config.head_dim;
+            rms_norm_ptr(state.q.data() + base, *w.q_norm, config.head_dim,
+                         config.rms_eps, state.q_rot.data() + base);
+        }
+        for (uint32_t h = 0; h < config.kv_heads; ++h) {
+            const size_t base = static_cast<size_t>(h) * config.head_dim;
+            rms_norm_ptr(state.k.data() + base, *w.k_norm, config.head_dim,
+                         config.rms_eps, state.k_rot.data() + base);
+        }
+        std::copy(state.q_rot.begin(), state.q_rot.end(), state.q.begin());
+        std::copy(state.k_rot.begin(), state.k_rot.end(), state.k.begin());
+        rotate(state, pos);
+        if (!emit_logits) {
+            for (float value : state.k_rot) if (!std::isfinite(value)) throw std::runtime_error("non-finite key state");
+            for (float value : state.v) if (!std::isfinite(value)) throw std::runtime_error("non-finite value state");
+        }
+        std::copy(state.q_rot.begin(), state.q_rot.end(), state.q.begin());
+        std::copy(state.k_rot.begin(), state.k_rot.end(), state.k.begin());
+        for (uint32_t h = 0; h < config.kv_heads; ++h) {
+            for (uint32_t d = 0; d < config.head_dim; ++d) {
+                cache_k[cache_offset(layer, pos, h, d)] = state.k[static_cast<size_t>(h) * config.head_dim + d];
+                cache_v[cache_offset(layer, pos, h, d)] = state.v[static_cast<size_t>(h) * config.head_dim + d];
+            }
+        }
+
+        const auto attention_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        std::fill(state.attention.begin(), state.attention.end(), 0.0f);
+        const float inv_sqrt = 1.0f / std::sqrt(static_cast<float>(config.head_dim));
+        const uint32_t total = pos + 1;
+        const auto normalize_attention_head = [&](uint32_t h, float max_score) {
+            float denom = 0.0f;
+            for (uint32_t t = 0; t < total; ++t) {
+                const size_t index = static_cast<size_t>(h) * max_context + t;
+                state.scores[index] = std::exp(state.scores[index] - max_score);
+                denom += state.scores[index];
+            }
+            for (uint32_t t = 0; t < total; ++t) state.scores[static_cast<size_t>(h) * max_context + t] /= denom;
+        };
+        const auto accumulate_attention_head = [&](uint32_t h, uint32_t kvh) {
+            float* const head_attention = state.attention.data() + static_cast<size_t>(h) * config.head_dim;
+            const auto value_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            if (!v_blocked_attention) {
+                for (uint32_t d = 0; d < config.head_dim; ++d) {
+                    float value = 0.0f;
+                    for (uint32_t t = 0; t < total; ++t) {
+                        const float product = state.scores[static_cast<size_t>(h) * max_context + t] * cache_v[cache_offset(layer, t, kvh, d)];
+                        value = value + product;
+                    }
+                    head_attention[d] = value;
+                }
+            } else {
+                constexpr uint32_t block_dims = 16;
+                for (uint32_t block = 0; block < config.head_dim; block += block_dims) {
+                    const uint32_t end = std::min(block + block_dims, config.head_dim);
+                    for (uint32_t d = block; d < end; ++d) head_attention[d] = 0.0f;
+                    for (uint32_t t = 0; t < total; ++t) {
+                        const float score = state.scores[static_cast<size_t>(h) * max_context + t];
+                        const float* const value_row = cache_v.data() + cache_offset(layer, t, kvh, block);
+                        for (uint32_t d = block; d < end; ++d) {
+                            const float product = score * value_row[d - block];
+                            head_attention[d] = head_attention[d] + product;
+                        }
+                    }
+                }
+            }
+            if (profile_enabled) {
+                attention_v_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - value_started).count());
+            }
+        };
+        const auto accumulate_shared_v = [&](uint32_t h0, uint32_t h1, uint32_t kvh) {
+            float* const head0 = state.attention.data() + static_cast<size_t>(h0) * config.head_dim;
+            float* const head1 = state.attention.data() + static_cast<size_t>(h1) * config.head_dim;
+            const auto value_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            constexpr uint32_t block_dims = 16;
+            for (uint32_t block = 0; block < config.head_dim; block += block_dims) {
+                const uint32_t end = std::min(block + block_dims, config.head_dim);
+                for (uint32_t d = block; d < end; ++d) { head0[d] = 0.0f; head1[d] = 0.0f; }
+                for (uint32_t t = 0; t < total; ++t) {
+                    const float score0 = state.scores[static_cast<size_t>(h0) * max_context + t];
+                    const float score1 = state.scores[static_cast<size_t>(h1) * max_context + t];
+                    const float* const value_row = cache_v.data() + cache_offset(layer, t, kvh, block);
+                    for (uint32_t d = block; d < end; ++d) {
+                        const float value = value_row[d - block];
+                        const float product0 = score0 * value;
+                        head0[d] = head0[d] + product0;
+                        const float product1 = score1 * value;
+                        head1[d] = head1[d] + product1;
+                    }
+                }
+            }
+            if (profile_enabled) {
+                attention_v_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - value_started).count());
+            }
+        };
+        const uint32_t q_per_kv = config.q_heads / config.kv_heads;
+        const bool shared_v_ready = gqa_v_shared && gqa_k_shared && v_blocked_attention && q_per_kv == 2;
+        if (gqa_v_shared && !shared_v_ready) ++gqa_v_shared_fallbacks;
+        if (gqa_k_shared && q_per_kv == 2) {
+            for (uint32_t h = 0; h < config.q_heads; h += 2) {
+                const uint32_t kvh = h / q_per_kv;
+                float max_score0 = -std::numeric_limits<float>::infinity();
+                float max_score1 = -std::numeric_limits<float>::infinity();
+                const auto q0 = state.q.data() + static_cast<size_t>(h) * config.head_dim;
+                const auto q1 = state.q.data() + static_cast<size_t>(h + 1) * config.head_dim;
+                const auto qk_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+                for (uint32_t t = 0; t < total; ++t) {
+                    float score0 = 0.0f;
+                    float score1 = 0.0f;
+                    const float* const key_row = cache_k.data() + cache_offset(layer, t, kvh, 0);
+                    for (uint32_t d = 0; d < config.head_dim; ++d) {
+                        const float key = key_row[d];
+                        score0 += q0[d] * key;
+                        score1 += q1[d] * key;
+                    }
+                    score0 *= inv_sqrt;
+                    score1 *= inv_sqrt;
+                    state.scores[static_cast<size_t>(h) * max_context + t] = score0;
+                    state.scores[static_cast<size_t>(h + 1) * max_context + t] = score1;
+                    max_score0 = std::max(max_score0, score0);
+                    max_score1 = std::max(max_score1, score1);
+                }
+                if (profile_enabled) attention_qk_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qk_started).count());
+                normalize_attention_head(h, max_score0);
+                normalize_attention_head(h + 1, max_score1);
+                if (shared_v_ready) accumulate_shared_v(h, h + 1, kvh);
+                else { accumulate_attention_head(h, kvh); accumulate_attention_head(h + 1, kvh); }
+            }
+        } else {
+            for (uint32_t h = 0; h < config.q_heads; ++h) {
+                const uint32_t kvh = h / q_per_kv;
+                float max_score = -std::numeric_limits<float>::infinity();
+                const auto qk_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+                for (uint32_t t = 0; t < total; ++t) {
+                    float score = 0.0f;
+                    for (uint32_t d = 0; d < config.head_dim; ++d) score += state.q[static_cast<size_t>(h) * config.head_dim + d] * cache_k[cache_offset(layer, t, kvh, d)];
+                    score *= inv_sqrt;
+                    state.scores[static_cast<size_t>(h) * max_context + t] = score;
+                    max_score = std::max(max_score, score);
+                }
+                if (profile_enabled) attention_qk_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qk_started).count());
+                normalize_attention_head(h, max_score);
+                accumulate_attention_head(h, kvh);
+            }
+        }
+        if (profile_enabled) {
+            attention_qk_ns += 0; // keep the counter's scope identical to step(); Q·K is timed above
+            stats.attention_kv_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - attention_started).count());
+            ++stats.attention_kv_calls;
+        }
+        gemv(*w.o_proj, state.attention.data(), state.projection.data(), ProfileOp::Output);
+        for (uint32_t d = 0; d < config.hidden; ++d) state.hidden[d] = state.residual[d] + state.projection[d];
+        rms_norm(state.hidden, *w.post_attention_norm, config.rms_eps, state.normed);
+    }
+
+    void finish_prefill_ffn(PrefillState& state, const LayerWeights& w) {
+        gemv(*w.gate_proj, state.normed.data(), state.intermediate.data(), ProfileOp::Ffn, true, true);
+        gemv(*w.up_proj, state.normed.data(), state.ffn_up.data(), ProfileOp::Ffn, true, true);
+        for (uint32_t d = 0; d < config.intermediate; ++d) {
+            const float gate = state.intermediate[d];
+            state.intermediate[d] = (gate / (1.0f + std::exp(-gate))) * state.ffn_up[d];
+        }
+        gemv(*w.down_proj, state.intermediate.data(), state.projection.data(), ProfileOp::Ffn, true, true);
+        for (uint32_t d = 0; d < config.hidden; ++d) state.hidden[d] += state.projection[d];
+    }
+
+    void finish_prefill_ffn_x4(PrefillState& s0, PrefillState& s1,
+                               PrefillState& s2, PrefillState& s3,
+                               const LayerWeights& w) {
+        gemv_x4(*w.gate_proj, s0.normed.data(), s0.intermediate.data(), s1.normed.data(), s1.intermediate.data(), s2.normed.data(), s2.intermediate.data(), s3.normed.data(), s3.intermediate.data());
+        gemv_x4(*w.up_proj, s0.normed.data(), s0.ffn_up.data(), s1.normed.data(), s1.ffn_up.data(), s2.normed.data(), s2.ffn_up.data(), s3.normed.data(), s3.ffn_up.data());
+        for (uint32_t d = 0; d < config.intermediate; ++d) {
+            for (PrefillState* state : {&s0, &s1, &s2, &s3}) {
+                const float gate = state->intermediate[d];
+                state->intermediate[d] = (gate / (1.0f + std::exp(-gate))) * state->ffn_up[d];
+            }
+        }
+        gemv_x4(*w.down_proj, s0.intermediate.data(), s0.projection.data(), s1.intermediate.data(), s1.projection.data(), s2.intermediate.data(), s2.projection.data(), s3.intermediate.data(), s3.projection.data());
+        for (PrefillState* state : {&s0, &s1, &s2, &s3}) {
+            for (uint32_t d = 0; d < config.hidden; ++d) state->hidden[d] += state->projection[d];
+        }
+    }
+
+    void finalize_prefill_state(PrefillState& state, bool emit_logits, bool copy_logits) {
+        rms_norm(state.hidden, tensor("model.norm.weight"), config.rms_eps, state.normed);
+        for (float value : state.normed) if (!std::isfinite(value)) throw std::runtime_error("non-finite hidden state");
+        if (!emit_logits) return;
+        ++stats.lm_head_calls;
+        gemv(tensor("model.embed_tokens.weight"), state.normed.data(), state.logits.data(), ProfileOp::Vocab);
+        for (float value : state.logits) if (!std::isfinite(value)) throw std::runtime_error("non-finite logits");
+        if (copy_logits) std::copy(state.logits.begin(), state.logits.end(), logits.begin());
+        logits_valid = true;
+    }
+
+    void prefill_x4(const int32_t* tokens, bool emit_last) {
+        logits_valid = false;
+        for (size_t lane = 0; lane < 4; ++lane) {
+            const Tensor& embedding = tensor("model.embed_tokens.weight");
+            std::copy_n(embedding.f32.data() + static_cast<size_t>(tokens[lane]) * config.hidden,
+                        config.hidden, prefill_states[lane].hidden.data());
+        }
+        const uint32_t base_position = position;
+        for (uint32_t layer = 0; layer < config.layers; ++layer) {
+            const LayerWeights& w = layers[layer];
+            if (profile_enabled) stats.remaining_ops_calls += 4;
+            for (size_t lane = 0; lane < 4; ++lane) {
+                const bool emit = !selective_logits || (emit_last && lane == 3);
+                process_prefill_attention(prefill_states[lane], w, layer,
+                                          base_position + static_cast<uint32_t>(lane), emit);
+            }
+            finish_prefill_ffn_x4(prefill_states[0], prefill_states[1], prefill_states[2], prefill_states[3], w);
+        }
+        for (size_t lane = 0; lane < 4; ++lane) {
+            const bool emit = !selective_logits || (emit_last && lane == 3);
+            finalize_prefill_state(prefill_states[lane], emit, lane == 3);
+        }
+        position += 4;
     }
 
     void step(int32_t token, bool emit_logits = true) {
@@ -749,7 +1051,19 @@ struct EvalWork {
 
 static void run_eval_work(void* raw) {
     auto* work = static_cast<EvalWork*>(raw);
-    for (size_t i = 0; i < work->count; ++i) work->model->step(work->token_ids[i], !work->selective || i + 1 == work->count);
+    size_t offset = 0;
+    while (offset < work->count) {
+        const size_t remaining = work->count - offset;
+        if (work->model->prefill_x4_ready && remaining >= 4) {
+            work->model->prefill_x4(work->token_ids + offset,
+                                    offset + 4 == work->count);
+            offset += 4;
+        } else {
+            work->model->step(work->token_ids[offset],
+                              !work->selective || offset + 1 == work->count);
+            ++offset;
+        }
+    }
     if (!work->model->logits_valid) throw std::runtime_error("logits were not produced");
     std::copy(work->model->logits.begin(), work->model->logits.end(), work->last_logits);
 }

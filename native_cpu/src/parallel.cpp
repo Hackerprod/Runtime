@@ -103,7 +103,7 @@ struct AffinityGuard {
 } // namespace
 
 struct ParallelTeam::Job {
-    enum class Kind : std::uint8_t { F32, F32Row4, F16, Q4 };
+    enum class Kind : std::uint8_t { F32, F32Row4, F16, F16X4, Q4 };
 
     Kind kind = Kind::F32;
     const float* weights = nullptr;
@@ -112,6 +112,14 @@ struct ParallelTeam::Job {
     const float* scales = nullptr;
     const float* x = nullptr;
     float* y = nullptr;
+    const float* x0 = nullptr;
+    float* y0 = nullptr;
+    const float* x1 = nullptr;
+    float* y1 = nullptr;
+    const float* x2 = nullptr;
+    float* y2 = nullptr;
+    const float* x3 = nullptr;
+    float* y3 = nullptr;
     std::size_t rows = 0;
     std::size_t cols = 0;
     KernelMode mode = KernelMode::Scalar;
@@ -195,6 +203,16 @@ struct ParallelTeam::State {
             mm::gemv_f16(job.f16_weights + range.begin * job.cols, job.x,
                          job.y + range.begin, range.end - range.begin,
                          job.cols, job.mode);
+            if (profiled) { state->participant_slots[participant].ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count()); ++state->participant_slots[participant].calls; }
+            return;
+        }
+        if (job.kind == ParallelTeam::Job::Kind::F16X4) {
+            mm::gemv_f16_x4(job.f16_weights + range.begin * job.cols,
+                            job.x0, job.y0 + range.begin,
+                            job.x1, job.y1 + range.begin,
+                            job.x2, job.y2 + range.begin,
+                            job.x3, job.y3 + range.begin,
+                            range.end - range.begin, job.cols, job.mode);
             if (profiled) { state->participant_slots[participant].ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count()); ++state->participant_slots[participant].calls; }
             return;
         }
@@ -466,6 +484,11 @@ void ParallelTeam::dispatch(const Job& job) {
             mm::gemv_f32_row4(job.weights, job.x, job.y, job.rows, job.cols, job.mode);
         } else if (job.kind == Job::Kind::F16) {
             mm::gemv_f16(job.f16_weights, job.x, job.y, job.rows, job.cols, job.mode);
+        } else if (job.kind == Job::Kind::F16X4) {
+            mm::gemv_f16_x4(job.f16_weights,
+                            job.x0, job.y0, job.x1, job.y1,
+                            job.x2, job.y2, job.x3, job.y3,
+                            job.rows, job.cols, job.mode);
         } else {
             mm::gemv_q4(job.packed, job.scales, job.x, job.y, job.rows, job.cols, job.mode);
         }
@@ -532,6 +555,26 @@ void ParallelTeam::gemv_f16(const std::uint16_t* weights, const float* x,
     job.f16_weights = weights;
     job.x = x;
     job.y = y;
+    job.rows = rows;
+    job.cols = cols;
+    job.mode = mode;
+    dispatch(job);
+}
+
+void ParallelTeam::gemv_f16_x4(const std::uint16_t* weights,
+                               const float* x0, float* y0,
+                               const float* x1, float* y1,
+                               const float* x2, float* y2,
+                               const float* x3, float* y3,
+                               std::size_t rows, std::size_t cols,
+                               KernelMode mode) {
+    Job job;
+    job.kind = Job::Kind::F16X4;
+    job.f16_weights = weights;
+    job.x0 = x0; job.y0 = y0;
+    job.x1 = x1; job.y1 = y1;
+    job.x2 = x2; job.y2 = y2;
+    job.x3 = x3; job.y3 = y3;
     job.rows = rows;
     job.cols = cols;
     job.mode = mode;

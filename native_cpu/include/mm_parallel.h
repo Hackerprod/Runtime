@@ -44,6 +44,12 @@ public:
                        std::size_t rows, std::size_t cols, KernelMode mode);
     void gemv_f16(const std::uint16_t* weights, const float* x, float* y,
                   std::size_t rows, std::size_t cols, KernelMode mode);
+    void gemv_f16_x4(const std::uint16_t* weights,
+                     const float* x0, float* y0,
+                     const float* x1, float* y1,
+                     const float* x2, float* y2,
+                     const float* x3, float* y3,
+                     std::size_t rows, std::size_t cols, KernelMode mode);
     void gemv_q4(const std::uint8_t* packed, const float* scales, const float* x,
                  float* y, std::size_t rows, std::size_t cols, KernelMode mode);
     void configure_profile(bool enabled) noexcept;

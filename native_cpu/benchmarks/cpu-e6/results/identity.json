@@ -1,0 +1,44 @@
+{
+  "schema": "cpu-e6/paired-v1",
+  "source_commit": "90bff5df79f8e1a2cdcb6ced97c94f97f6399219",
+  "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+  "tokenizer_sha256": {
+    "tokenizer.json": "71f32c68cf63a15355a8fc171b7594b3d41870fe0ddb54fc6aefa55f73a4a668",
+    "tokenizer_config.json": "04ae7620b9cf93fd2d6fbf94936b0c3c4be65f30cd6ef6fa8741baac986525d1",
+    "chat_template.jinja": "97c6a9ef3f8d35044f435bb7773f1af160a7328ab6e8d2e9d67702941320a711"
+  },
+  "baseline_library_sha256": "b410e642e2249a8982a9a83b134f3d7f5e1f37c677f11d10900ed0e213cb97ab",
+  "candidate_library_sha256": "ab464cc1c91aedd3b33bf995fef82657e2316123979e6f1d04d15bb4eace72fd",
+  "threads": 1,
+  "cpus": [
+    0
+  ],
+  "row_weights": [
+    1
+  ],
+  "profiler": false,
+  "policy": {
+    "temperature": 0.9,
+    "top_k": 50,
+    "top_p": 0.85,
+    "seed": 0,
+    "system": "official MiniMind chat system"
+  },
+  "attention_storage": {
+    "representations": "q_proj,k_proj,v_proj,o_proj across 8 layers",
+    "requirement": "FP32->FP16->FP32 bit exact",
+    "expected_compact_bytes": 28311552
+  },
+  "pair_count": 3,
+  "forced_prefix_lengths": [
+    256,
+    1792
+  ],
+  "continuation": 32,
+  "repetitive_prompts": [
+    "Name one benefit of tests.",
+    "Name one benefit of tests.",
+    "Name one benefit of tests."
+  ],
+  "timed_operation": "prefill/decode inference only; loading and FP16 preparation reported separately"
+}

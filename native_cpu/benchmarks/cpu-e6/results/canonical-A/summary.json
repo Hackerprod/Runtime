@@ -1,0 +1,86 @@
+{
+  "schema": "perf-g1/canonical-output-toks-v1",
+  "prompt": "Could you tell me about programming languages?",
+  "policy": {
+    "temperature": 0.9,
+    "top_k": 50,
+    "top_p": 0.85,
+    "seed": 0,
+    "context_limit": 2048,
+    "max_new_tokens": 256,
+    "system": "你是MiniMind，一个乐于助人、知识渊博的AI助手。请用完整且友好的方式回答用户问题。"
+  },
+  "dll": {
+    "path": "native_cpu\\benchmarks\\cpu-e4\\baseline\\minimind_cpu.dll",
+    "sha256": "b410e642e2249a8982a9a83b134f3d7f5e1f37c677f11d10900ed0e213cb97ab"
+  },
+  "runs": [
+    {
+      "index": 1,
+      "output_tokens_per_second": 140.91237904229487,
+      "legacy_target_tokens_per_second": 140.3619400616609,
+      "prefill_seconds": 0.18153820000588894,
+      "decode_seconds": 1.8167317998595536,
+      "generated_tokens": 256,
+      "sampled_ids_sha256": "de27dbd287b02a36f6116b22152359f4b5d1e13c9d0cf3f454512d40a6dcb8b6",
+      "text_sha256": "bbab7af92f7db6781fe097645898ee98d3409f9367a9d764883637489bace770",
+      "speculative_decode": {
+        "proposed_blocks": 0,
+        "proposed_tokens": 0,
+        "accepted_tokens": 0,
+        "verify_calls": 0,
+        "first_position_failures": 0,
+        "accepted_length_total": 0,
+        "mean_accepted_length": 0.0,
+        "lookup_seconds": 0.00832019979134202,
+        "verification_seconds": 0.0
+      }
+    },
+    {
+      "index": 2,
+      "output_tokens_per_second": 140.69448336888806,
+      "legacy_target_tokens_per_second": 140.14489554322833,
+      "prefill_seconds": 0.17988650011830032,
+      "decode_seconds": 1.819545399863273,
+      "generated_tokens": 256,
+      "sampled_ids_sha256": "de27dbd287b02a36f6116b22152359f4b5d1e13c9d0cf3f454512d40a6dcb8b6",
+      "text_sha256": "bbab7af92f7db6781fe097645898ee98d3409f9367a9d764883637489bace770",
+      "speculative_decode": {
+        "proposed_blocks": 0,
+        "proposed_tokens": 0,
+        "accepted_tokens": 0,
+        "verify_calls": 0,
+        "first_position_failures": 0,
+        "accepted_length_total": 0,
+        "mean_accepted_length": 0.0,
+        "lookup_seconds": 0.008168002357706428,
+        "verification_seconds": 0.0
+      }
+    },
+    {
+      "index": 3,
+      "output_tokens_per_second": 136.12406092748597,
+      "legacy_target_tokens_per_second": 135.592326314488,
+      "prefill_seconds": 0.19119319994933903,
+      "decode_seconds": 1.8806373998522758,
+      "generated_tokens": 256,
+      "sampled_ids_sha256": "de27dbd287b02a36f6116b22152359f4b5d1e13c9d0cf3f454512d40a6dcb8b6",
+      "text_sha256": "bbab7af92f7db6781fe097645898ee98d3409f9367a9d764883637489bace770",
+      "speculative_decode": {
+        "proposed_blocks": 0,
+        "proposed_tokens": 0,
+        "accepted_tokens": 0,
+        "verify_calls": 0,
+        "first_position_failures": 0,
+        "accepted_length_total": 0,
+        "mean_accepted_length": 0.0,
+        "lookup_seconds": 0.008286602096632123,
+        "verification_seconds": 0.0
+      }
+    }
+  ],
+  "hashes_identical_across_runs": {
+    "sampled_ids": true,
+    "text": true
+  }
+}

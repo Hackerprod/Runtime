@@ -1,0 +1,32 @@
+Canonical prompt
+Could you tell me about programming languages?
+
+First response:
+Sure, I can explain programming languages in a very simple way.
+
+**Python** is a versatile language that can help with various tasks like web development, data analysis, machine learning, and more. Python is often used for web development, data analysis, and more.
+
+**JavaScript** is another language that can work with JavaScript.
+
+**Java** is a high-level, object-oriented language that can handle basic web development, including web browsers, server-side scripting languages, and APIs like Webpack.
+
+**C++** is a programming language that is highly optimized for C++ and highly optimized for performance and low-level programming tasks.
+
+**Ruby** is a programming language that is easier to work with and has a rich ecosystem of libraries and frameworks.
+
+**Swift** is another language that is powerful for iOS or macOS, and it's used in iOS applications and macOS applications.
+
+Are you working on a particular project or application? I'm here to help you with
+
+output tok/s: 140.91 / 140.69 / 136.12
+median output tok/s: 140.69
+legacy target tok/s: 140.36 / 140.14 / 135.59
+prefill: 0.182s / 0.180s / 0.191s
+generated tokens: 256 / 256 / 256
+sampled-ids SHA256: de27dbd287b02a36f6116b22152359f4b5d1e13c9d0cf3f454512d40a6dcb8b6 / de27dbd287b02a36f6116b22152359f4b5d1e13c9d0cf3f454512d40a6dcb8b6 / de27dbd287b02a36f6116b22152359f4b5d1e13c9d0cf3f454512d40a6dcb8b6
+text SHA256: bbab7af92f7db6781fe097645898ee98d3409f9367a9d764883637489bace770 / bbab7af92f7db6781fe097645898ee98d3409f9367a9d764883637489bace770 / bbab7af92f7db6781fe097645898ee98d3409f9367a9d764883637489bace770
+speculative run 1: blocks=0 proposed=0 accepted=0 verify_calls=0
+speculative run 2: blocks=0 proposed=0 accepted=0 verify_calls=0
+speculative run 3: blocks=0 proposed=0 accepted=0 verify_calls=0
+
+--- stderr ---

@@ -307,6 +307,7 @@ struct Runtime {
     bool profile_enabled = false;
     bool selective_logits = false;
     bool logits_valid = false;
+    std::uint64_t cache_epoch = 0;
     Config config;
     uint32_t max_context = 0;
     mm::KernelMode kernel_mode = mm::KernelMode::Scalar;
@@ -611,6 +612,7 @@ MM_RUNTIME_API int mm_reset(void* runtime) {
         Runtime* model = checked_runtime(runtime);
         model->position = 0;
         model->logits_valid = false;
+        ++model->cache_epoch;
         return 0;
     } catch (...) {
         return -1;
@@ -665,6 +667,13 @@ MM_RUNTIME_API int mm_get_stats(void* runtime, MmRuntimeStats* out_stats) {
 
 MM_RUNTIME_API uint64_t mm_lm_head_calls(void* runtime) {
     try { return checked_runtime(runtime)->stats.lm_head_calls; } catch (...) { return 0; }
+}
+
+MM_RUNTIME_API int mm_logits_valid(void* runtime) { try { return checked_runtime(runtime)->logits_valid ? 1 : 0; } catch (...) { return 0; } }
+MM_RUNTIME_API uint64_t mm_cache_epoch(void* runtime) { try { return checked_runtime(runtime)->cache_epoch; } catch (...) { return 0; } }
+MM_RUNTIME_API int mm_truncate(void* runtime, uint32_t target, char* error, size_t error_cap) {
+    try { Runtime* model = checked_runtime(runtime); if (target > model->position) throw std::runtime_error("cannot advance cache with truncate"); model->position = target; model->logits_valid = false; ++model->cache_epoch; return 0; }
+    catch (const std::exception& ex) { set_error(error, error_cap, ex.what()); return -1; } catch (...) { set_error(error, error_cap, "unknown truncate failure"); return -1; }
 }
 
 MM_RUNTIME_API int mm_configure_selective_logits(void* runtime, int enabled) {
@@ -723,9 +732,11 @@ MM_RUNTIME_API int mm_eval(void* runtime, const int32_t* token_ids, size_t count
             EvalWork work{model, token_ids, count, last_logits, model->selective_logits};
             model->parallel.execute(run_eval_work, &work);
             if (!model->logits_valid) throw std::runtime_error("logits were not produced");
+            ++model->cache_epoch;
         } catch (...) {
             model->position = old_position;
             model->logits_valid = false;
+            ++model->cache_epoch;
             throw;
         }
         return 0;

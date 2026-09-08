@@ -1,0 +1,714 @@
+{
+  "schema_version": 1,
+  "reference": {
+    "manifest": {
+      "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\checkpoints\\minimind-3-hf\\download-manifest.json",
+      "bytes": 2180,
+      "sha256": "9f568c3f41570b2e9d732430bf684803d61969107872dd213bfe759326f62609"
+    },
+    "repo_id": "jingyaogong/minimind-3",
+    "revision": "f92512d4cd6142fa9acc0d6022375049a8974bf6",
+    "files": {
+      "config.json": {
+        "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\checkpoints\\minimind-3-hf\\config.json",
+        "bytes": 863,
+        "sha256": "efcfa39ede9bbb5b64ded2bb90969e4b840f0f9e1e36725d386acb7eca1c6d05"
+      },
+      "generation_config.json": {
+        "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\checkpoints\\minimind-3-hf\\generation_config.json",
+        "bytes": 69,
+        "sha256": "3ee3cbe9acb55059b37a4e90bb843812eb86f70c5ebea404f137cd9c80127870"
+      },
+      "tokenizer.json": {
+        "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\checkpoints\\minimind-3-hf\\tokenizer.json",
+        "bytes": 451182,
+        "sha256": "71f32c68cf63a15355a8fc171b7594b3d41870fe0ddb54fc6aefa55f73a4a668"
+      },
+      "tokenizer_config.json": {
+        "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\checkpoints\\minimind-3-hf\\tokenizer_config.json",
+        "bytes": 7545,
+        "sha256": "04ae7620b9cf93fd2d6fbf94936b0c3c4be65f30cd6ef6fa8741baac986525d1"
+      },
+      "special_tokens_map.json": {
+        "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\checkpoints\\minimind-3-hf\\special_tokens_map.json",
+        "bytes": 1059,
+        "sha256": "f85ecedc16cf0083242e21ac2ef23ac613153b71240c7d2ab61de24f085d2db9"
+      },
+      "chat_template.jinja": {
+        "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\checkpoints\\minimind-3-hf\\chat_template.jinja",
+        "bytes": 3895,
+        "sha256": "97c6a9ef3f8d35044f435bb7773f1af160a7328ab6e8d2e9d67702941320a711"
+      },
+      "model.safetensors": {
+        "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\checkpoints\\minimind-3-hf\\model.safetensors",
+        "bytes": 127834168,
+        "sha256": "3adf69402b5d22e693151cabadc12528f923c4ba6bf343738aaf13f0892162e8"
+      }
+    },
+    "upstream_revision": "6fc918beb68a0d8c40452338df6319fe168014ba",
+    "upstream_source": {
+      "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\model\\model_minimind.py",
+      "bytes": 18957,
+      "sha256": "8188a3165e9c9b8c1eac4c5889fbd67732cc0db54b10701d1a21a0526deb2c12"
+    },
+    "synthesized_aliases": [
+      {
+        "target": "lm_head.weight",
+        "source": "model.embed_tokens.weight"
+      }
+    ],
+    "source_dtypes": [
+      "torch.float16"
+    ],
+    "loaded_dtype": "torch.float32",
+    "flash_attn": false,
+    "state_tensor_count": 91
+  },
+  "library": {
+    "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\minimind_cpu.dll",
+    "bytes": 109056,
+    "sha256": "21efa3f95294d195dcc0841c3975ba31842a5f9425efb5160c5f6c38093acf99"
+  },
+  "hardware": {
+    "cpu": "AMD Ryzen AI 5 330 w/ Radeon 820M",
+    "machine": "AMD64",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "logical_cpus": 8,
+    "python": "3.14.3"
+  },
+  "build_info": {
+    "build_type": "Release",
+    "cmake": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+    "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /EHsc /fp:precise /std:c++20",
+    "compiler": {
+      "id": "MSVC",
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+      "version": "19.50.35727.0"
+    },
+    "generator": "Visual Studio 18 2026",
+    "library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\minimind_cpu.dll",
+    "library_sha256": "21efa3f95294d195dcc0841c3975ba31842a5f9425efb5160c5f6c38093acf99",
+    "native_sources_sha256": {
+      "native_cpu/CMakeLists.txt": "5f460690b76922b7bb5785c12fee9bd1715d8a87508968aa1868f9c34e885166",
+      "native_cpu/include/mm_kernels.h": "b6c07a29316bbc98eeb209ed62c26eafc2f130b1a1e10fdfbc0aab3255654b4f",
+      "native_cpu/include/mm_parallel.h": "9553dfa8212e43977c3502cb9f51d603192641d51fe9aa4e552bffc41e73a20d",
+      "native_cpu/include/mm_runtime.h": "db3dd1b95b51da1f381ef8532159bb60806954e114022f40a611ade20816e749",
+      "native_cpu/src/kernels.cpp": "1afcf2844a5917a39cc52907ce0033fd7793153863df79ee236827f7190bfdd4",
+      "native_cpu/src/parallel.cpp": "c9bdd91cec7858cd7246c11f8e6774a2e4cd5d35e7c10fb097200caf81a20a8f",
+      "native_cpu/src/runtime.cpp": "c294ddc25ad79f86007f7258e6b10ec5b88bddd7726e555657f8190f07130606",
+      "native_cpu/tests/test_kernels.cpp": "e5414578bac4a5f3decd6e24efb85939bb5f30766c8b45796c76fa0beb01e5f7",
+      "native_cpu/tests/test_runtime.cpp": "486b06618307fe5f3159c99cf38ac6346211b0934c7184c7235bcf1176396b6a"
+    },
+    "native_threads": 1,
+    "schema_version": 1
+  },
+  "build_info_file": {
+    "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\build-info.json",
+    "bytes": 1795,
+    "sha256": "8d26dac70ef816e56172e7b1554f372ea373b80e79f55761d05a0f55600754ad"
+  },
+  "configuration": {
+    "atol": 0.0001,
+    "rtol": 0.0001,
+    "eos_token_id": 2,
+    "decode_tokens": 16,
+    "context": 256,
+    "torch_threads": 1,
+    "torch_interop_threads": 1,
+    "native_threads": 1,
+    "torch_version": "2.11.0+cpu",
+    "dtype": "float32",
+    "benchmark_repeats": 0
+  },
+  "verification_gaps": [
+    "Q4 was not supplied or evaluated."
+  ],
+  "cases": [
+    {
+      "language": "en",
+      "prompt": "Explain what a CPU does in two sentences.",
+      "prompt_ids": [
+        1,
+        832,
+        311,
+        234,
+        4114,
+        992,
+        740,
+        1621,
+        299,
+        535,
+        4488,
+        2310,
+        353,
+        2102,
+        5754,
+        49,
+        2,
+        234,
+        1,
+        1388,
+        570,
+        811,
+        234,
+        25,
+        234,
+        234,
+        26,
+        234,
+        234
+      ],
+      "reference_generated_ids": [
+        68,
+        535,
+        4488,
+        395,
+        299,
+        1197,
+        3217,
+        354,
+        4818,
+        591,
+        395,
+        2854,
+        364,
+        2936,
+        299,
+        1197
+      ],
+      "reference_response": "A CPU is a specific type of computer that is designed to perform a specific",
+      "reference_cache_vs_full": {
+        "positions": 29,
+        "logit_values": 185600,
+        "max_absolute_error": 5.8650970458984375e-05,
+        "rms_error": 7.939993095752314e-06,
+        "allclose": true,
+        "top1_matches": 29,
+        "top1_agreement": 1.0,
+        "mean_kl_reference_to_native": 1.715581051672788e-11
+      },
+      "variants": {
+        "fp32_scalar": {
+          "logits": {
+            "tokenwise_prefill": {
+              "positions": 29,
+              "logit_values": 185600,
+              "max_absolute_error": 7.271766662597656e-05,
+              "rms_error": 1.2707337224449356e-05,
+              "allclose": true,
+              "top1_matches": 29,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 4.9684952820758646e-11
+            },
+            "full_prefill_last": {
+              "positions": 1,
+              "logit_values": 6400,
+              "max_absolute_error": 3.6016106605529785e-05,
+              "rms_error": 1.025874985861433e-05,
+              "allclose": true,
+              "top1_matches": 1,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 1.668561209138055e-11
+            },
+            "teacher_forced_decode": {
+              "positions": 16,
+              "logit_values": 102400,
+              "max_absolute_error": 4.6815723180770874e-05,
+              "rms_error": 1.0194714757184772e-05,
+              "allclose": true,
+              "top1_matches": 16,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 2.5368658103665557e-11
+            }
+          },
+          "generated_ids": [
+            68,
+            535,
+            4488,
+            395,
+            299,
+            1197,
+            3217,
+            354,
+            4818,
+            591,
+            395,
+            2854,
+            364,
+            2936,
+            299,
+            1197
+          ],
+          "greedy_token_stream_match": true,
+          "all_logits_within_tolerance": true,
+          "eos_reached": false,
+          "artifact": "fp32",
+          "mode": "scalar",
+          "backend": "scalar",
+          "response": "A CPU is a specific type of computer that is designed to perform a specific",
+          "status": "PASS"
+        },
+        "fp32_auto": {
+          "logits": {
+            "tokenwise_prefill": {
+              "positions": 29,
+              "logit_values": 185600,
+              "max_absolute_error": 5.125999450683594e-05,
+              "rms_error": 8.468265435685184e-06,
+              "allclose": true,
+              "top1_matches": 29,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 1.9426551656697564e-11
+            },
+            "full_prefill_last": {
+              "positions": 1,
+              "logit_values": 6400,
+              "max_absolute_error": 2.6702880859375e-05,
+              "rms_error": 7.365101403762677e-06,
+              "allclose": true,
+              "top1_matches": 1,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 2.1366253807971386e-11
+            },
+            "teacher_forced_decode": {
+              "positions": 16,
+              "logit_values": 102400,
+              "max_absolute_error": 4.1604042053222656e-05,
+              "rms_error": 7.429906030269279e-06,
+              "allclose": true,
+              "top1_matches": 16,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 1.3120745373629243e-11
+            }
+          },
+          "generated_ids": [
+            68,
+            535,
+            4488,
+            395,
+            299,
+            1197,
+            3217,
+            354,
+            4818,
+            591,
+            395,
+            2854,
+            364,
+            2936,
+            299,
+            1197
+          ],
+          "greedy_token_stream_match": true,
+          "all_logits_within_tolerance": true,
+          "eos_reached": false,
+          "artifact": "fp32",
+          "mode": "auto",
+          "backend": "avx2",
+          "response": "A CPU is a specific type of computer that is designed to perform a specific",
+          "status": "PASS"
+        }
+      }
+    },
+    {
+      "language": "es",
+      "prompt": "Explica qué hace una CPU en dos frases.",
+      "prompt_ids": [
+        1,
+        832,
+        311,
+        234,
+        4114,
+        4504,
+        100,
+        893,
+        3006,
+        736,
+        473,
+        1406,
+        100,
+        535,
+        4488,
+        1057,
+        1041,
+        118,
+        341,
+        117,
+        3164,
+        49,
+        2,
+        234,
+        1,
+        1388,
+        570,
+        811,
+        234,
+        25,
+        234,
+        234,
+        26,
+        234,
+        234
+      ],
+      "reference_generated_ids": [
+        79,
+        100,
+        535,
+        4488,
+        1057,
+        1041,
+        118,
+        341,
+        117,
+        3164,
+        4564,
+        1406,
+        100,
+        535,
+        4488,
+        1057
+      ],
+      "reference_response": "La CPU en dos frases es una CPU en",
+      "reference_cache_vs_full": {
+        "positions": 35,
+        "logit_values": 224000,
+        "max_absolute_error": 5.245208740234375e-05,
+        "rms_error": 7.5498643579739216e-06,
+        "allclose": true,
+        "top1_matches": 35,
+        "top1_agreement": 1.0,
+        "mean_kl_reference_to_native": 1.9650528200863088e-11
+      },
+      "variants": {
+        "fp32_scalar": {
+          "logits": {
+            "tokenwise_prefill": {
+              "positions": 35,
+              "logit_values": 224000,
+              "max_absolute_error": 8.320808410644531e-05,
+              "rms_error": 1.154571491192273e-05,
+              "allclose": true,
+              "top1_matches": 35,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 5.682512852980552e-11
+            },
+            "full_prefill_last": {
+              "positions": 1,
+              "logit_values": 6400,
+              "max_absolute_error": 3.9577484130859375e-05,
+              "rms_error": 1.1761925450984983e-05,
+              "allclose": true,
+              "top1_matches": 1,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 1.8852012738198458e-11
+            },
+            "teacher_forced_decode": {
+              "positions": 16,
+              "logit_values": 102400,
+              "max_absolute_error": 5.6743621826171875e-05,
+              "rms_error": 9.804594052202108e-06,
+              "allclose": true,
+              "top1_matches": 16,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 2.9337308010115174e-11
+            }
+          },
+          "generated_ids": [
+            79,
+            100,
+            535,
+            4488,
+            1057,
+            1041,
+            118,
+            341,
+            117,
+            3164,
+            4564,
+            1406,
+            100,
+            535,
+            4488,
+            1057
+          ],
+          "greedy_token_stream_match": true,
+          "all_logits_within_tolerance": true,
+          "eos_reached": false,
+          "artifact": "fp32",
+          "mode": "scalar",
+          "backend": "scalar",
+          "response": "La CPU en dos frases es una CPU en",
+          "status": "PASS"
+        },
+        "fp32_auto": {
+          "logits": {
+            "tokenwise_prefill": {
+              "positions": 35,
+              "logit_values": 224000,
+              "max_absolute_error": 7.605552673339844e-05,
+              "rms_error": 8.593204728642516e-06,
+              "allclose": true,
+              "top1_matches": 35,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 2.6533736497426266e-11
+            },
+            "full_prefill_last": {
+              "positions": 1,
+              "logit_values": 6400,
+              "max_absolute_error": 2.6702880859375e-05,
+              "rms_error": 6.587083465478055e-06,
+              "allclose": true,
+              "top1_matches": 1,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 1.468430456240475e-11
+            },
+            "teacher_forced_decode": {
+              "positions": 16,
+              "logit_values": 102400,
+              "max_absolute_error": 4.00543212890625e-05,
+              "rms_error": 6.792579381801783e-06,
+              "allclose": true,
+              "top1_matches": 16,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 1.0070943450398388e-11
+            }
+          },
+          "generated_ids": [
+            79,
+            100,
+            535,
+            4488,
+            1057,
+            1041,
+            118,
+            341,
+            117,
+            3164,
+            4564,
+            1406,
+            100,
+            535,
+            4488,
+            1057
+          ],
+          "greedy_token_stream_match": true,
+          "all_logits_within_tolerance": true,
+          "eos_reached": false,
+          "artifact": "fp32",
+          "mode": "auto",
+          "backend": "avx2",
+          "response": "La CPU en dos frases es una CPU en",
+          "status": "PASS"
+        }
+      }
+    },
+    {
+      "language": "zh",
+      "prompt": "请用两句话解释什么是机器学习。",
+      "prompt_ids": [
+        1,
+        832,
+        311,
+        234,
+        960,
+        368,
+        1181,
+        4803,
+        2093,
+        1403,
+        357,
+        2683,
+        302,
+        2,
+        234,
+        1,
+        1388,
+        570,
+        811,
+        234,
+        25,
+        234,
+        234,
+        26,
+        234,
+        234
+      ],
+      "reference_generated_ids": [
+        2683,
+        357,
+        2225,
+        4637,
+        513,
+        976,
+        294,
+        697,
+        476,
+        2575,
+        934,
+        369,
+        417,
+        815,
+        2554,
+        2089
+      ],
+      "reference_response": "机器学习是人工智能的一个分支，它使计算机能够在不进行明确编程",
+      "reference_cache_vs_full": {
+        "positions": 26,
+        "logit_values": 166400,
+        "max_absolute_error": 4.398822784423828e-05,
+        "rms_error": 6.871491431526718e-06,
+        "allclose": true,
+        "top1_matches": 26,
+        "top1_agreement": 1.0,
+        "mean_kl_reference_to_native": 1.4741104146666806e-11
+      },
+      "variants": {
+        "fp32_scalar": {
+          "logits": {
+            "tokenwise_prefill": {
+              "positions": 26,
+              "logit_values": 166400,
+              "max_absolute_error": 7.05718994140625e-05,
+              "rms_error": 1.0641814686131579e-05,
+              "allclose": true,
+              "top1_matches": 26,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 3.898880450032986e-11
+            },
+            "full_prefill_last": {
+              "positions": 1,
+              "logit_values": 6400,
+              "max_absolute_error": 3.337860107421875e-05,
+              "rms_error": 8.329878821770243e-06,
+              "allclose": true,
+              "top1_matches": 1,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 2.3457906700558346e-11
+            },
+            "teacher_forced_decode": {
+              "positions": 16,
+              "logit_values": 102400,
+              "max_absolute_error": 4.9591064453125e-05,
+              "rms_error": 1.0127331296204644e-05,
+              "allclose": true,
+              "top1_matches": 16,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 1.4881391301222214e-11
+            }
+          },
+          "generated_ids": [
+            2683,
+            357,
+            2225,
+            4637,
+            513,
+            976,
+            294,
+            697,
+            476,
+            2575,
+            934,
+            369,
+            417,
+            815,
+            2554,
+            2089
+          ],
+          "greedy_token_stream_match": true,
+          "all_logits_within_tolerance": true,
+          "eos_reached": false,
+          "artifact": "fp32",
+          "mode": "scalar",
+          "backend": "scalar",
+          "response": "机器学习是人工智能的一个分支，它使计算机能够在不进行明确编程",
+          "status": "PASS"
+        },
+        "fp32_auto": {
+          "logits": {
+            "tokenwise_prefill": {
+              "positions": 26,
+              "logit_values": 166400,
+              "max_absolute_error": 4.506111145019531e-05,
+              "rms_error": 7.3091772763367655e-06,
+              "allclose": true,
+              "top1_matches": 26,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 1.334507145351314e-11
+            },
+            "full_prefill_last": {
+              "positions": 1,
+              "logit_values": 6400,
+              "max_absolute_error": 2.2232532501220703e-05,
+              "rms_error": 5.320307708710747e-06,
+              "allclose": true,
+              "top1_matches": 1,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 5.715142778764084e-12
+            },
+            "teacher_forced_decode": {
+              "positions": 16,
+              "logit_values": 102400,
+              "max_absolute_error": 4.00543212890625e-05,
+              "rms_error": 6.918135717962801e-06,
+              "allclose": true,
+              "top1_matches": 16,
+              "top1_agreement": 1.0,
+              "mean_kl_reference_to_native": 4.671778852430948e-12
+            }
+          },
+          "generated_ids": [
+            2683,
+            357,
+            2225,
+            4637,
+            513,
+            976,
+            294,
+            697,
+            476,
+            2575,
+            934,
+            369,
+            417,
+            815,
+            2554,
+            2089
+          ],
+          "greedy_token_stream_match": true,
+          "all_logits_within_tolerance": true,
+          "eos_reached": false,
+          "artifact": "fp32",
+          "mode": "auto",
+          "backend": "avx2",
+          "response": "机器学习是人工智能的一个分支，它使计算机能够在不进行明确编程",
+          "status": "PASS"
+        }
+      }
+    }
+  ],
+  "notes": [
+    "FP32 requires allclose logits and exact greedy token streams; no language-quality gate.",
+    "Q4 drift is measured separately; exact token streams are not expected or required.",
+    "Timings include Python/native boundary overhead, exclude loading, and are not fixed speed claims.",
+    "Original pinned tokenizer and chat template are used unchanged with enable_thinking=False."
+  ],
+  "artifacts": {
+    "fp32": {
+      "artifact": {
+        "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\artifacts\\minimind-fp32.bin",
+        "bytes": 255655658,
+        "sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33"
+      },
+      "manifest": {
+        "path": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\artifacts\\minimind-fp32.bin.manifest.json",
+        "bytes": 20130,
+        "sha256": "c70aff0784a25cd7aea72a2720a36e21c2c4b816668b4cf7f83e785bf6c6637d"
+      },
+      "quantization": "fp32",
+      "source_sha256": "3adf69402b5d22e693151cabadc12528f923c4ba6bf343738aaf13f0892162e8",
+      "config_sha256": "efcfa39ede9bbb5b64ded2bb90969e4b840f0f9e1e36725d386acb7eca1c6d05",
+      "source_manifest_verified": true
+    }
+  },
+  "status": "PASS"
+}

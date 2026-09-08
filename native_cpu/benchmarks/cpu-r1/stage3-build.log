@@ -1,0 +1,51 @@
++ C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe -S D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu -B D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -G Visual Studio 18 2026 -A x64
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: D:/Install/Dev/Projects/IA/Multi MoE/minimind/native_cpu/build
++ C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build --config Release --parallel 1 -- /nr:false
+Versión de MSBuild 18.4.0+6e61e96ac para .NET Framework
+
+  minimind_cpu.vcxproj -> D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\Release\minimind_cpu.dll
+  mm_test_kernels.vcxproj -> D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\Release\mm_test_kernels.exe
+cl : línea de comandos  warning D9025: invalidando '/DNDEBUG' con '/UNDEBUG' [D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\mm_test_runtime.vcxproj]
+  test_runtime.cpp
+  mm_test_runtime.vcxproj -> D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\Release\mm_test_runtime.exe
+  D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\Release\mm_test_runtime.exe: message: deploying dependencies
+  D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build\Release\minimind_cpu.dll: message: deploying dependencies
++ C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe --test-dir D:\Install\Dev\Projects\IA\Multi MoE\minimind\native_cpu\build -C Release --output-on-failure
+Test project D:/Install/Dev/Projects/IA/Multi MoE/minimind/native_cpu/build
+    Start 1: mm_kernels
+1/2 Test #1: mm_kernels .......................   Passed    0.02 sec
+    Start 2: mm_runtime
+2/2 Test #2: mm_runtime .......................   Passed    0.33 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.37 sec
+{
+  "build_type": "Release",
+  "cmake": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+  "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /EHsc /fp:precise /std:c++20",
+  "compiler": {
+    "id": "MSVC",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+    "version": "19.50.35727.0"
+  },
+  "generator": "Visual Studio 18 2026",
+  "library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\minimind_cpu.dll",
+  "library_sha256": "21efa3f95294d195dcc0841c3975ba31842a5f9425efb5160c5f6c38093acf99",
+  "native_sources_sha256": {
+    "native_cpu/CMakeLists.txt": "5f460690b76922b7bb5785c12fee9bd1715d8a87508968aa1868f9c34e885166",
+    "native_cpu/include/mm_kernels.h": "b6c07a29316bbc98eeb209ed62c26eafc2f130b1a1e10fdfbc0aab3255654b4f",
+    "native_cpu/include/mm_parallel.h": "9553dfa8212e43977c3502cb9f51d603192641d51fe9aa4e552bffc41e73a20d",
+    "native_cpu/include/mm_runtime.h": "db3dd1b95b51da1f381ef8532159bb60806954e114022f40a611ade20816e749",
+    "native_cpu/src/kernels.cpp": "1afcf2844a5917a39cc52907ce0033fd7793153863df79ee236827f7190bfdd4",
+    "native_cpu/src/parallel.cpp": "c9bdd91cec7858cd7246c11f8e6774a2e4cd5d35e7c10fb097200caf81a20a8f",
+    "native_cpu/src/runtime.cpp": "c294ddc25ad79f86007f7258e6b10ec5b88bddd7726e555657f8190f07130606",
+    "native_cpu/tests/test_kernels.cpp": "e5414578bac4a5f3decd6e24efb85939bb5f30766c8b45796c76fa0beb01e5f7",
+    "native_cpu/tests/test_runtime.cpp": "486b06618307fe5f3159c99cf38ac6346211b0934c7184c7235bcf1176396b6a"
+  },
+  "native_threads": 1,
+  "schema_version": 1
+}

@@ -108,9 +108,11 @@ def build_session(args):
         row_weights = getattr(args, "row_weights", None)
         selective_logits = bool(getattr(args, "selective_logits", False))
         diagnostics = bool(getattr(args, "diagnostics", False))
-        if args.backend == "original" and (threads != 1 or cpus is not None or row_weights is not None or selective_logits or diagnostics):
+        reuse_kv = bool(getattr(args, "reuse_kv", False))
+        if args.backend == "original" and (threads != 1 or cpus is not None or row_weights is not None or selective_logits or diagnostics or reuse_kv):
             if selective_logits: raise ValueError("--selective-logits is supported only by the native backend")
             if diagnostics: raise ValueError("--diagnostics is supported only by the native backend")
+            if reuse_kv: raise ValueError("--reuse-kv is supported only by the native backend")
             raise ValueError("thread affinity and row-sharding options are supported only by the native backend")
         if args.backend == "native":
             _require_file(args.model, "native FP32 model", "--model"); _require_file(args.library, "native library", "--library")
@@ -133,7 +135,7 @@ def build_session(args):
         counted = CountedRuntime(runtime)
         session = ChatSession(counted, tokenizer, context_limit=args.context_limit, max_new_tokens=args.max_new_tokens,
                               temperature=args.temperature, seed=args.seed, system=getattr(args, "system", None),
-                              top_k=getattr(args, "top_k", 0), top_p=getattr(args, "top_p", 1.0))
+                              top_k=getattr(args, "top_k", 0), top_p=getattr(args, "top_p", 1.0), reuse_kv=reuse_kv)
         return session, counted, time.perf_counter() - started
     except BaseException:
         if runtime is not None: runtime.close()
@@ -163,6 +165,7 @@ def response_metrics(args, result, counted, loading_seconds):
             "native_stats": getattr(counted, "stats", {}),
             "native_phase_stats": getattr(result, "native_phase_stats", None),
             "selective_logits": bool(getattr(args, "selective_logits", False)),
+            "reuse_kv": bool(getattr(args, "reuse_kv", False)),
             "decode_tokens_per_second": counted.decode_evaluated_tokens / result.decode_seconds if counted.decode_evaluated_tokens and result.decode_seconds > 0 else None,
             "finish_reason": "eos" if result.generated_tokens < args.max_new_tokens else "length"}
 
@@ -190,6 +193,7 @@ def make_parser():
     parser.add_argument("--threads", type=int, default=1, help="native compute participants including caller (1-64)")
     parser.add_argument("--diagnostics", action="store_true", help="enable native diagnostic profiling (off by default)")
     parser.add_argument("--selective-logits", action="store_true", help="evaluate vocabulary logits only when requested")
+    parser.add_argument("--reuse-kv", action="store_true", help="reuse verified KV prefixes between turns")
     parser.add_argument("--cpus", help="comma-separated Windows group-0 logical CPU indices in participant order")
     parser.add_argument("--row-weights", dest="row_weights", help="comma-separated positive native row-shard weights")
     return parser

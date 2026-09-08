@@ -1,6 +1,6 @@
 """Local-tokenizer chat frontend for the MMCPU001 runtime."""
 from __future__ import annotations
-import argparse, json, os, sys, time
+import argparse, json, os, sys, time, operator
 from pathlib import Path
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -119,7 +119,7 @@ def sample_logits(logits, rng, *, temperature=0.0, top_k=0, top_p=1.0):
     return int(rng.choice(values.size, p=probs / total))
 
 class ChatSession:
-    def __init__(self, runtime, tokenizer, *, context_limit=256, max_new_tokens=64, temperature=0.0, seed=0, system=None, top_k=0, top_p=1.0):
+    def __init__(self, runtime, tokenizer, *, context_limit=256, max_new_tokens=64, temperature=0.0, seed=0, system=None, top_k=0, top_p=1.0, reuse_kv=False):
         self.runtime, self.tokenizer = runtime, tokenizer
         runtime_vocab = getattr(runtime, "vocab_size", None); tokenizer_vocab = getattr(tokenizer, "vocab_size", None)
         if tokenizer_vocab is None and hasattr(tokenizer, "get_vocab_size"): tokenizer_vocab = tokenizer.get_vocab_size()
@@ -132,6 +132,7 @@ class ChatSession:
         if not np.isfinite(float(top_p)) or not 0 < float(top_p) <= 1: raise ValueError("top_p must be in (0, 1]")
         self.context_limit, self.max_new_tokens, self.temperature = cap, int(max_new_tokens), float(temperature)
         self.top_k, self.top_p, self.seed = int(top_k), float(top_p), int(seed); self.rng = np.random.default_rng(self.seed)
+        self.reuse_kv = bool(reuse_kv); self.cached_token_ids = []; self._cache_identity = None; self._cache_trusted = True
         self.messages = []; self.messages.append({"role":"system", "content":system}) if system else None
     def _ids(self, messages):
         validate_messages(messages)
@@ -146,7 +147,11 @@ class ChatSession:
         if ids and isinstance(ids[0], list):
             if len(ids) != 1: raise ChatError("tokenizer returned multiple batches")
             ids = ids[0]
-        return [int(x) for x in ids]
+        out = []
+        for x in ids:
+            try: out.append(operator.index(x))
+            except TypeError as exc: raise ChatError("tokenizer returned non-integer token ID") from exc
+        return out
     def _bounded(self, user):
         current = list(self.messages) + [{"role":"user", "content":user}]
         while True:
@@ -156,6 +161,37 @@ class ChatSession:
             if start + 1 >= len(current) - 1 or current[start]["role"] != "user" or current[start + 1]["role"] != "assistant": raise ChatError("current turn does not fit context limit")
             del current[start:start + 2]
     def _sample(self, logits): return sample_logits(logits, self.rng, temperature=self.temperature, top_k=self.top_k, top_p=self.top_p)
+    def _position(self):
+        try: return int(self.runtime.position)
+        except (AttributeError, RuntimeError, TypeError, ValueError): return None
+    def _identity(self):
+        try: native = self.runtime.cache_identity
+        except AttributeError: native = None
+        return (id(self.runtime), native)
+    def _reset_cache(self):
+        self.cached_token_ids = []; self._cache_trusted = False
+        try:
+            self.runtime.reset()
+            pos = self._position()
+            if pos is not None and pos != 0: raise RuntimeError("runtime reset did not return to position zero")
+            self._cache_identity = self._identity(); self._cache_trusted = True
+        except BaseException:
+            self._cache_identity = None
+            raise
+    def _truncate_cache(self, position):
+        truncate = getattr(self.runtime, "truncate", None)
+        if truncate is None or not bool(getattr(self.runtime, "supports_truncate", False)): self._reset_cache(); return False
+        truncate(int(position))
+        if self._position() is not None and self._position() != int(position): raise RuntimeError("runtime truncate position mismatch")
+        self.cached_token_ids = self.cached_token_ids[:position]; self._cache_identity = self._identity(); return True
+    def _eval_and_commit(self, ids):
+        values = list(ids); before = self._position()
+        if before is not None and before != len(self.cached_token_ids): raise RuntimeError("cache position invariant violated")
+        if any(x < np.iinfo(np.int32).min or x > np.iinfo(np.int32).max for x in values): raise ChatError("token ID exceeds native integer range")
+        logits = self.runtime.eval(np.asarray(values, dtype=np.int32))
+        after = self._position()
+        if after is not None and before is not None and after != before + len(values): raise RuntimeError("runtime position did not advance by evaluated token count")
+        self.cached_token_ids.extend(values); self._cache_identity = self._identity(); return logits
     def _stats_snapshot(self):
         try:
             value = getattr(self.runtime, "stats", None)
@@ -177,14 +213,47 @@ class ChatSession:
             else: out[key] = value
         return out
     def turn(self, user):
+        # Transaction boundary: no cache/history mutation survives any
+        # runtime, sampling, or decoding failure.
         if not isinstance(user, str) or not user.strip(): raise ChatError("user message is empty")
-        turn_start = time.perf_counter(); prepare_started = turn_start
+        turn_start = time.perf_counter()
         current, ids = self._bounded(user)
         if not ids: raise ChatError("empty rendered prompt")
-        prepare_seconds = time.perf_counter() - prepare_started
-        try: position_before = self.runtime.position
-        except (AttributeError, RuntimeError): position_before = None
-        self.runtime.reset()
+        vocab = getattr(self.runtime, "vocab_size", None)
+        if any(x < 0 or (vocab is not None and x >= int(vocab)) or x < np.iinfo(np.int32).min or x > np.iinfo(np.int32).max for x in ids): raise ChatError("invalid token IDs")
+        prepare_seconds = time.perf_counter() - turn_start
+        try:
+            return self._turn_impl(current, ids, turn_start, prepare_seconds)
+        except BaseException:
+            self.cached_token_ids = []; self._cache_identity = None; self._cache_trusted = False
+            try: self.runtime.reset()
+            except BaseException: pass
+            raise
+
+    def _turn_impl(self, current, ids, turn_start, prepare_seconds):
+        position_before = self._position()
+        cache_action = {"action": "reset", "reason": "reuse_disabled" if not self.reuse_kv else "empty_cache"}
+        lcp = 0
+        can_reuse = (self.reuse_kv and self._cache_trusted and bool(self.cached_token_ids)
+                     and bool(getattr(self.runtime, "supports_truncate", False))
+                     and self._position() == len(self.cached_token_ids)
+                     and self._identity() == self._cache_identity)
+        if can_reuse and self._identity() == self._cache_identity:
+            lcp = next((i for i, (a,b) in enumerate(zip(self.cached_token_ids, ids)) if a != b), min(len(self.cached_token_ids), len(ids)))
+            if lcp < len(self.cached_token_ids):
+                if self._truncate_cache(lcp): cache_action = {"action": "truncate", "reason": "prompt_prefix_diverged"}
+                else: cache_action = {"action": "reset", "reason": "truncate_unsupported"}; lcp = 0
+            else: cache_action = {"action": "reuse", "reason": "exact_cached_prefix"}
+        elif self.reuse_kv and self.cached_token_ids and not bool(getattr(self.runtime, "supports_truncate", False)):
+            self._reset_cache(); lcp = 0; cache_action = {"action": "reset", "reason": "truncate_unsupported"}
+        elif self.reuse_kv and self.cached_token_ids and self._identity() != self._cache_identity:
+            self._reset_cache(); lcp = 0; cache_action = {"action": "reset", "reason": "cache_identity_changed"}
+        elif self.reuse_kv and self.cached_token_ids and self._position() != len(self.cached_token_ids):
+            self._reset_cache(); lcp = 0; cache_action = {"action": "reset", "reason": "cache_position_mismatch"}
+        elif self.reuse_kv and self.cached_token_ids and not self._cache_trusted:
+            self._reset_cache(); lcp = 0; cache_action = {"action": "reset", "reason": "cache_untrusted"}
+        else:
+            self._reset_cache(); lcp = 0
         # Reset counters independently from model state.  Native R1 runtimes
         # expose reset_stats; the fallback wrapper implements the same hook.
         reset_stats = getattr(self.runtime, "begin_turn", None) or getattr(self.runtime, "reset_stats", None)
@@ -192,7 +261,15 @@ class ChatSession:
         stats_before = self._stats_snapshot()
         set_phase = getattr(self.runtime, "set_phase", None)
         if set_phase is not None: set_phase("prefill")
-        prefill_started = time.perf_counter(); logits = self.runtime.eval(np.asarray(ids, dtype=np.int32)); ttft = time.perf_counter() - prefill_started
+        pending = ids[lcp:]
+        if not pending:
+            if not self.cached_token_ids: raise ChatError("empty cached prompt")
+            rewind = max(0, len(self.cached_token_ids)-1)
+            if self._truncate_cache(rewind):
+                pending = ids[rewind:]; lcp = rewind; cache_action = {"action": "truncate", "reason": "empty_suffix_reevaluation"}
+            else:
+                pending = ids; lcp = 0
+        prefill_started = time.perf_counter(); logits = self._eval_and_commit(pending); ttft = time.perf_counter() - prefill_started
         prefill_stats = self._stats_snapshot()
         generated = []; sampled_ids = []; eos = int(getattr(self.tokenizer, "eos_token_id", 2) or 2)
         sampling_seconds = 0.0; native_generation_seconds = 0.0; decode_evaluated = 0
@@ -206,10 +283,9 @@ class ChatSession:
             if token == eos: break
             generated.append(token)
             if index + 1 < self.max_new_tokens:
-                native_started = time.perf_counter(); logits = self.runtime.eval(np.asarray([token], dtype=np.int32)); native_generation_seconds += time.perf_counter() - native_started; decode_evaluated += 1
+                native_started = time.perf_counter(); logits = self._eval_and_commit([token]); native_generation_seconds += time.perf_counter() - native_started; decode_evaluated += 1
         decode = time.perf_counter() - decode_started; text = self.tokenizer.decode(generated, skip_special_tokens=True)
-        self.messages = current + [{"role":"assistant", "content":text}]
-        position_after = getattr(self.runtime, "position", None)
+        position_after = self._position()
         native_stats = self._stats_snapshot() or {}
         native_phase_stats = {"prefill": self._stats_delta(prefill_stats, stats_before),
                               "decode": self._stats_delta(native_stats, prefill_stats)}
@@ -218,22 +294,25 @@ class ChatSession:
                "lm_head_calls" in native_phase_stats[phase] for phase in ("prefill", "decode")):
             lm_heads = {phase: native_phase_stats[phase]["lm_head_calls"] for phase in ("prefill", "decode")}
         total = time.perf_counter() - turn_start
-        metrics = {"prompt_tokens_total": len(ids), "prefix_tokens_reused": 0,
-                   "prefill_tokens_evaluated": len(ids), "decode_tokens_evaluated": decode_evaluated,
+        metrics = {"prompt_tokens_total": len(ids), "prefix_tokens_reused": lcp,
+                   "prefill_tokens_evaluated": len(pending), "decode_tokens_evaluated": decode_evaluated,
                    "generated_tokens": len(generated), "lm_head_calls": lm_heads,
+                   "prompt_token_ids": list(ids),
                    "position_before": position_before, "position_after": position_after,
-                   "cache_action": {"action": "reset", "reason": "stage1_no_kv_reuse"},
+                   "cache_action": cache_action,
                    "prompt_prepare_seconds": prepare_seconds, "prefill_seconds": ttft,
                    "native_generation_seconds": native_generation_seconds,
                    "sampling_seconds": sampling_seconds, "total_seconds": total,
                    "sampled_ids": sampled_ids, "native": native_stats,
                    "native_phase_stats": native_phase_stats}
-        return ChatResponse(text, len(generated), len(ids), ttft, decode, self.runtime.backend,
-                            len(ids), 0, len(ids), decode_evaluated, lm_heads, position_before, position_after,
-                            metrics["cache_action"], prepare_seconds, ttft, native_generation_seconds,
+        response = ChatResponse(text, len(generated), len(ids), ttft, decode, self.runtime.backend,
+                            len(ids), lcp, len(pending), decode_evaluated, lm_heads, position_before, position_after,
+                            cache_action, prepare_seconds, ttft, native_generation_seconds,
                             sampling_seconds, total, sampled_ids, metrics, native_phase_stats)
+        self.messages = current + [{"role":"assistant", "content":text}]
+        return response
     def clear(self):
-        self.runtime.reset(); self.messages = [self.messages[0]] if self.messages and self.messages[0]["role"] == "system" else []; self.rng = np.random.default_rng(self.seed)
+        self._reset_cache(); self.messages = [self.messages[0]] if self.messages and self.messages[0]["role"] == "system" else []; self.rng = np.random.default_rng(self.seed)
 
 def _response_json(r, args):
     return {
@@ -267,6 +346,7 @@ def _response_json(r, args):
         "native_phase_stats": r.native_phase_stats,
         "diagnostics": bool(getattr(args, "diagnostics", False)),
         "selective_logits": bool(getattr(args, "selective_logits", False)),
+        "reuse_kv": bool(getattr(args, "reuse_kv", False)),
     }
 
 
@@ -303,6 +383,7 @@ def main(argv=None):
     p.add_argument("--metrics-json", action="store_true")
     p.add_argument("--diagnostics", action="store_true", help="enable native diagnostic profiling (off by default)")
     p.add_argument("--selective-logits", action="store_true", help="evaluate vocabulary logits only when requested")
+    p.add_argument("--reuse-kv", action="store_true", help="reuse verified KV prefixes between turns")
     args = _resolve_profile(p.parse_args(argv))
     if args.max_new_tokens < 0: p.error("--max-new-tokens must be non-negative")
     if args.context_limit < 2: p.error("--context-limit must be at least 2")
@@ -320,7 +401,7 @@ def main(argv=None):
             session = ChatSession(runtime, tokenizer, context_limit=args.context_limit,
                                   max_new_tokens=args.max_new_tokens,
                                   temperature=args.temperature, top_k=args.top_k,
-                                  top_p=args.top_p, seed=args.seed, system=args.system)
+                                  top_p=args.top_p, seed=args.seed, system=args.system, reuse_kv=args.reuse_kv)
             print(
                 f"profile={args.profile}, temperature={args.temperature:g}, "
                 f"top_k={args.top_k}, top_p={args.top_p:g}, seed={args.seed}, "

@@ -66,3 +66,63 @@ logits retain the finite-output check. A reset or execution failure invalidates
 logits, and failed batches retain the previous logical cache position. The
 skipped projection itself is not evaluated for overflow at discarded positions;
 the internal state, rather than a nonexistent vocabulary output, is validated.
+
+## Persistent KV (opt-in)
+
+Pass `--reuse-kv` to the native frontend; combine it with `--selective-logits`
+to remove both repeated prompt evaluation and discarded vocabulary heads.
+Both flags remain **off by default**. The original PyTorch backend rejects
+native-only options rather than pretending to implement them.
+
+`cached_token_ids` records only successfully evaluated IDs, with
+`runtime.position == len(cached_token_ids)`. Every turn still renders the full
+canonical prompt and applies the existing whole-pair history eviction policy.
+Only its exact token-ID common prefix at identical positions may be reused.
+Generated text is not assumed to re-tokenize identically. EOS and the final
+length-limited token are not added to the cache unless actually evaluated.
+
+The new `mm_truncate`/`NativeRuntime.truncate` operation only moves backward
+within evaluated state. It invalidates logits and advances the cache mutation
+epoch, without needing to zero discarded storage: attention respects the new
+logical boundary. Even a same-position truncation invalidates logits. When
+the pending prompt suffix is empty, the session rewinds one token and evaluates
+the canonical last token again. It never requests empty `eval()` or stale logits.
+
+The native handle and mutation epoch detect external cache changes, including
+changes that end at the same position. Replacing the runtime invalidates reuse.
+Old DLLs without truncation safely reset and evaluate the complete prompt;
+metrics explicitly report zero reuse and the fallback reason.
+
+Invalid prompts are rejected before cache/history/RNG mutation. Failures after
+execution starts invalidate bookkeeping and attempt a reset; if reset also
+fails, the cache remains untrusted and cannot be reused. History is committed
+only after the complete response succeeds. Recovery does not add sampler calls
+or rewind the RNG. `/clear` preserves the original system-message and seeded
+RNG-reset behavior.
+
+### Local comparison
+
+From the repository root, the unchanged launcher forwards optional flags:
+
+```bat
+compare_cpu\Native_CPP.cmd
+compare_cpu\Native_CPP.cmd --selective-logits --reuse-kv
+```
+
+Use the first command as the reference. Use `--diagnostics` only for profiling,
+not final speed comparisons. These optimizations preserve responses; they do
+not improve the checkpoint's language knowledge or conversational quality.
+
+### Stage 3 verification and rollback
+
+`python -m native_cpu.tools.build` builds Release and runs CTest. Run Python
+regressions with `python -m pytest native_cpu/tests -q -p no:cacheprovider`.
+Native tests cover scalar/AVX2, 1/2/4 participants, selective on/off, truncation,
+divergent replay, invalid preflight input and post-start failures. Session tests
+cover exact/short/divergent prefixes, re-tokenization, limits 0/1/normal,
+immediate EOS, history eviction, clear, legacy DLLs and transactional recovery.
+
+Stage 3 can be rolled back independently by removing cache reuse, truncation
+and epoch bindings plus their tests; stage 1 diagnostics and stage 2 selective
+logits remain independent. Disabling `--reuse-kv` retains the all-prompt path
+without reverting any code.

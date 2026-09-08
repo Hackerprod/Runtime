@@ -1,0 +1,31 @@
+EVAL S1 completed
+EVAL P2 completed
+EVAL P4 completed
+CONVERSATION historical R0_greedy completed
+CONVERSATION historical R0_sampled completed
+CONVERSATION historical R1_greedy completed
+CONVERSATION historical R1_sampled completed
+CONVERSATION historical R2_greedy completed
+CONVERSATION historical R2_sampled completed
+CONVERSATION historical R3_greedy completed
+CONVERSATION historical R3_sampled completed
+CONVERSATION historical P2_greedy completed
+CONVERSATION historical P2_sampled completed
+CONVERSATION historical P4_greedy completed
+CONVERSATION historical P4_sampled completed
+CONVERSATION historical frozen_greedy completed
+CONVERSATION historical frozen_sampled completed
+CONVERSATION second R0_greedy completed
+CONVERSATION second R0_sampled completed
+CONVERSATION second R1_greedy completed
+CONVERSATION second R1_sampled completed
+CONVERSATION second R2_greedy completed
+CONVERSATION second R2_sampled completed
+CONVERSATION second R3_greedy completed
+CONVERSATION second R3_sampled completed
+CONVERSATION second P2_greedy completed
+CONVERSATION second P2_sampled completed
+CONVERSATION second P4_greedy completed
+CONVERSATION second P4_sampled completed
+CONVERSATION second frozen_greedy completed
+CONVERSATION second frozen_sampled completed

@@ -81,10 +81,19 @@ class NativeRuntime:
             self._lm_head_calls.argtypes = [ctypes.c_void_p]; self._lm_head_calls.restype = ctypes.c_uint64
         self._configure_selective = getattr(lib, "mm_configure_selective_logits", None)
         self._query_selective = getattr(lib, "mm_selective_logits", None)
+        self._truncate = getattr(lib, "mm_truncate", None)
+        self._query_logits_valid = getattr(lib, "mm_logits_valid", None)
+        self._query_epoch = getattr(lib, "mm_cache_epoch", None)
         if self._configure_selective is not None:
             self._configure_selective.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_selective.restype = ctypes.c_int
         if self._query_selective is not None:
             self._query_selective.argtypes = [ctypes.c_void_p]; self._query_selective.restype = ctypes.c_int
+        if self._truncate is not None:
+            self._truncate.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_size_t]; self._truncate.restype = ctypes.c_int
+        if self._query_logits_valid is not None:
+            self._query_logits_valid.argtypes = [ctypes.c_void_p]; self._query_logits_valid.restype = ctypes.c_int
+        if self._query_epoch is not None:
+            self._query_epoch.argtypes = [ctypes.c_void_p]; self._query_epoch.restype = ctypes.c_uint64
         self._configure_threads = getattr(lib, "mm_configure_threads", None)
         self._thread_count = getattr(lib, "mm_thread_count", None)
         self._thread_cpu = getattr(lib, "mm_thread_cpu", None)
@@ -176,6 +185,28 @@ class NativeRuntime:
             if not enabled: return
             raise NativeError("native runtime does not support selective logits")
         if int(self._configure_selective(self._handle, int(bool(enabled)))) != 0: raise NativeError("mm_configure_selective_logits failed")
+
+    @property
+    def supports_truncate(self): return self._truncate is not None
+
+    def truncate(self, position):
+        self._check()
+        try: position = operator.index(position)
+        except TypeError as exc: raise ValueError("position must be an integer") from exc
+        if position < 0 or position > 0xffffffff: raise ValueError("position must be a non-negative uint32")
+        if self._truncate is None: raise NativeError("native runtime does not support truncation")
+        self._error[0] = 0
+        if int(self._truncate(self._handle, position, self._error, self._error_cap)) != 0: raise NativeError(self._message("mm_truncate failed"))
+
+    @property
+    def logits_valid(self):
+        self._check()
+        return False if self._query_logits_valid is None else bool(self._query_logits_valid(self._handle))
+
+    @property
+    def cache_identity(self):
+        self._check()
+        return (int(self._handle), None if self._query_epoch is None else int(self._query_epoch(self._handle)))
 
     @property
     def selective_logits(self):

@@ -313,9 +313,9 @@ std::vector<uint8_t> threading_fixture(bool q4) {
 
 struct ScopedRuntime {
     void* value;
-    ScopedRuntime(const std::filesystem::path& path, int mode) {
+    ScopedRuntime(const std::filesystem::path& path, int mode, uint32_t context = 16) {
         char error[256]{};
-        value = mm_load(path.string().c_str(), 16, mode, error, sizeof(error));
+        value = mm_load(path.string().c_str(), context, mode, error, sizeof(error));
         if (!value) std::cerr << error << '\n';
         assert(value != nullptr);
     }
@@ -677,9 +677,85 @@ void test_selective_logits_contract() {
     std::filesystem::remove(path);
 }
 
+void test_truncate_contract() {
+    const auto path = write_file(threading_fixture(false), ".truncate");
+    const std::vector<int32_t> prefix = {1, 4, 7, 2, 9, 3, 5, 6};
+    const std::vector<int32_t> suffix = {10, 11, 12};
+    char error[256]{};
+    Logits output{};
+    assert(mm_truncate(nullptr, 0, error, sizeof(error)) != 0);
+    assert(mm_logits_valid(nullptr) == 0 && mm_cache_epoch(nullptr) == 0);
+
+    for (int mode : {0, 1}) for (uint32_t threads : {1u, 2u, 4u}) for (int selective : {0, 1}) {
+        for (const uint32_t target : {0u, 3u, 7u, 8u}) {
+            ScopedRuntime candidate(path, mode), clean(path, mode);
+            configure(candidate.value, threads);
+            configure(clean.value, threads);
+            assert(mm_configure_selective_logits(candidate.value, selective) == 0);
+            assert(mm_configure_selective_logits(clean.value, selective) == 0);
+            const Logits before = evaluate(candidate.value, prefix);
+            assert(mm_position(candidate.value) == 8 && mm_logits_valid(candidate.value) == 1);
+            const uint64_t epoch = mm_cache_epoch(candidate.value);
+            const uint64_t heads = mm_lm_head_calls(candidate.value);
+            assert(mm_truncate(candidate.value, target, error, sizeof(error)) == 0);
+            assert(mm_position(candidate.value) == target);
+            assert(mm_cache_epoch(candidate.value) == epoch + 1);
+            assert(mm_logits_valid(candidate.value) == 0);
+            assert(mm_lm_head_calls(candidate.value) == heads); // truncate does not reset stats
+            (void)before;
+
+            std::vector<int32_t> replay(prefix.begin(), prefix.begin() + target);
+            replay.insert(replay.end(), suffix.begin(), suffix.end());
+            const Logits expected = evaluate(clean.value, replay);
+            const Logits actual = evaluate(candidate.value, suffix);
+            assert_exact(actual, expected);
+        }
+
+        // A no-op truncate still invalidates the endpoint logits and advances
+        // the cache epoch, while rejecting attempts to advance the position.
+        ScopedRuntime checks(path, mode);
+        configure(checks.value, threads);
+        assert(mm_configure_selective_logits(checks.value, selective) == 0);
+        const Logits endpoint = evaluate(checks.value, {1, 4, 7, 2});
+        const uint64_t endpoint_epoch = mm_cache_epoch(checks.value);
+        assert(mm_truncate(checks.value, 4, error, sizeof(error)) == 0);
+        assert(mm_logits_valid(checks.value) == 0 && mm_cache_epoch(checks.value) == endpoint_epoch + 1);
+        const uint32_t position = mm_position(checks.value);
+        std::memset(error, 0, sizeof(error));
+        assert(mm_truncate(checks.value, UINT32_MAX, error, sizeof(error)) != 0);
+        assert(mm_position(checks.value) == position && mm_cache_epoch(checks.value) == endpoint_epoch + 1);
+        assert(error[0] != '\0');
+        (void)endpoint;
+    }
+
+    // Invalid token validation does not consume a cache epoch. Execution
+    // failure after work has started does, and rolls back position/logits.
+    {
+        ScopedRuntime runtime(path, 0);
+        const int32_t token = static_cast<int32_t>(thread_vocab);
+        const uint64_t epoch = mm_cache_epoch(runtime.value);
+        assert(mm_eval(runtime.value, &token, 1, output.data(), output.size(), error, sizeof(error)) != 0);
+        assert(mm_cache_epoch(runtime.value) == epoch && mm_position(runtime.value) == 0);
+    }
+    const auto overflow_path = write_file(valid_fixture(false, 1.0f, true), ".truncate-overflow");
+    for (int mode : {0, 1}) {
+        ScopedRuntime runtime(overflow_path, mode, 3);
+        const int32_t zero = 0;
+        assert(mm_eval(runtime.value, &zero, 1, output.data(), output.size(), error, sizeof(error)) == 0);
+        const uint64_t epoch = mm_cache_epoch(runtime.value);
+        const int32_t partial[] = {0, 1};
+        assert(mm_eval(runtime.value, partial, 2, output.data(), output.size(), error, sizeof(error)) != 0);
+        assert(mm_cache_epoch(runtime.value) == epoch + 1);
+        assert(mm_position(runtime.value) == 1 && mm_logits_valid(runtime.value) == 0);
+    }
+    std::filesystem::remove(overflow_path);
+    std::filesystem::remove(path);
+}
+
 int main() {
     test_diagnostic_profile_contract();
     test_selective_logits_contract();
+    test_truncate_contract();
     test_cache_reset_and_overflow();
     test_crc_and_truncation();
     test_rejects_malformed_metadata();

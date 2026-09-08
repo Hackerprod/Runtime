@@ -8,6 +8,16 @@ import numpy as np
 
 class NativeError(RuntimeError): pass
 
+class _MmRuntimeStats(ctypes.Structure):
+    _fields_ = [(name, ctypes.c_uint64) for name in (
+        "lm_head_calls", "qkv_calls", "attention_kv_calls", "output_projection_calls",
+        "ffn_calls", "vocab_head_calls", "remaining_ops_calls", "qkv_ns",
+        "attention_kv_ns", "output_projection_ns", "ffn_ns", "vocab_head_ns",
+        "remaining_ops_ns")]
+    _fields_ += [("participant_compute_ns", ctypes.c_uint64 * 64),
+                 ("controller_wait_ns", ctypes.c_uint64),
+                 ("participant_compute_calls", ctypes.c_uint64 * 64)]
+
 class NativeRuntime:
     def __init__(self, model_path, library_path=None, max_context=2048, kernel="auto", *, context=None, mode=None,
                  threads=1, cpus=None, row_weights=None):
@@ -66,10 +76,16 @@ class NativeRuntime:
         lib.mm_position.argtypes = [ctypes.c_void_p]; lib.mm_position.restype = ctypes.c_uint32
         lib.mm_backend.argtypes = [ctypes.c_void_p]; lib.mm_backend.restype = ctypes.c_char_p
         lib.mm_eval.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int32), ctypes.c_size_t, ctypes.POINTER(ctypes.c_float), ctypes.c_size_t, ctypes.c_char_p, ctypes.c_size_t]; lib.mm_eval.restype = ctypes.c_int
+        self._lm_head_calls = getattr(lib, "mm_lm_head_calls", None)
+        if self._lm_head_calls is not None:
+            self._lm_head_calls.argtypes = [ctypes.c_void_p]; self._lm_head_calls.restype = ctypes.c_uint64
         self._configure_threads = getattr(lib, "mm_configure_threads", None)
         self._thread_count = getattr(lib, "mm_thread_count", None)
         self._thread_cpu = getattr(lib, "mm_thread_cpu", None)
         self._thread_weight = getattr(lib, "mm_thread_weight", None)
+        self._configure_profile = getattr(lib, "mm_configure_profile", None)
+        self._reset_stats = getattr(lib, "mm_reset_stats", None)
+        self._get_stats = getattr(lib, "mm_get_stats", None)
         if self._configure_threads is not None:
             self._configure_threads.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
                                                 ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint32),
@@ -81,6 +97,12 @@ class NativeRuntime:
             self._thread_cpu.argtypes = [ctypes.c_void_p, ctypes.c_uint32]; self._thread_cpu.restype = ctypes.c_int32
         if self._thread_weight is not None:
             self._thread_weight.argtypes = [ctypes.c_void_p, ctypes.c_uint32]; self._thread_weight.restype = ctypes.c_uint32
+        if self._configure_profile is not None:
+            self._configure_profile.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_profile.restype = ctypes.c_int
+        if self._reset_stats is not None:
+            self._reset_stats.argtypes = [ctypes.c_void_p]; self._reset_stats.restype = ctypes.c_int
+        if self._get_stats is not None:
+            self._get_stats.argtypes = [ctypes.c_void_p, ctypes.POINTER(_MmRuntimeStats)]; self._get_stats.restype = ctypes.c_int
 
     def _configure(self, threads, cpus, row_weights):
         cpu_array = None if cpus is None else (ctypes.c_uint32 * len(cpus))(*cpus)
@@ -141,6 +163,36 @@ class NativeRuntime:
     def reset(self):
         self._check()
         if int(self._lib.mm_reset(self._handle)) != 0: raise NativeError("mm_reset failed")
+
+    def configure_profile(self, enabled=True):
+        self._check()
+        if self._configure_profile is None:
+            if not enabled: return
+            raise NativeError("native runtime does not support profiling")
+        if int(self._configure_profile(self._handle, int(bool(enabled)))) != 0: raise NativeError("mm_configure_profile failed")
+
+    def reset_stats(self):
+        self._check()
+        if self._reset_stats is None: return
+        if int(self._reset_stats(self._handle)) != 0: raise NativeError("mm_reset_stats failed")
+
+    @property
+    def stats(self):
+        self._check()
+        if self._get_stats is None: return None
+        raw = _MmRuntimeStats()
+        if int(self._get_stats(self._handle, ctypes.byref(raw))) != 0: raise NativeError("mm_get_stats failed")
+        result = {}
+        for name, _ in raw._fields_:
+            value = getattr(raw, name)
+            result[name] = [int(item) for item in value] if isinstance(value, ctypes.Array) else int(value)
+        return result
+
+    @property
+    def lm_head_calls(self):
+        self._check()
+        if self._lm_head_calls is None: return None
+        return int(self._lm_head_calls(self._handle))
 
     def eval(self, token_ids):
         self._check()

@@ -540,7 +540,59 @@ void test_pinned_workers_preserve_caller_affinity() {
 
 } // namespace
 
+void test_diagnostic_profile_contract() {
+    const auto path = write_file(threading_fixture(false), ".profile");
+    for (int mode : {0, 1}) {
+        ScopedRuntime reference(path, mode);
+        const auto expected = evaluate(reference.value, {1, 4});
+        for (uint32_t threads : {1u, 2u, 4u}) {
+            ScopedRuntime candidate(path, mode);
+            // Profiling must survive creating/replacing the persistent team.
+            assert(mm_configure_profile(candidate.value, 1) == 0);
+            configure(candidate.value, threads);
+            assert_exact(evaluate(candidate.value, {1, 4}), expected);
+            MmRuntimeStats stats{};
+            assert(mm_get_stats(candidate.value, &stats) == 0);
+            assert(stats.lm_head_calls == 2 && mm_lm_head_calls(candidate.value) == 2);
+            assert(stats.qkv_calls == 12 && stats.attention_kv_calls == 4);
+            assert(stats.output_projection_calls == 4 && stats.ffn_calls == 12);
+            assert(stats.vocab_head_calls == 2);
+            assert(stats.qkv_ns > 0 && stats.attention_kv_ns > 0);
+            assert(stats.remaining_ops_ns > 0 && stats.vocab_head_ns > 0);
+            for (uint32_t i = 0; i < 64; ++i) {
+                assert(stats.participant_compute_calls[i] == (i < threads ? 30u : 0u));
+                assert((stats.participant_compute_ns[i] > 0) == (i < threads));
+            }
+            assert(mm_position(candidate.value) == 2);
+            assert(mm_reset_stats(candidate.value) == 0);
+            assert(mm_position(candidate.value) == 2);
+            assert(mm_lm_head_calls(candidate.value) == 0);
+            assert_exact(evaluate(candidate.value, {3}), evaluate(reference.value, {3}));
+            // Model reset never resets the independently scoped statistics.
+            assert(mm_reset(candidate.value) == 0);
+            assert(mm_position(candidate.value) == 0);
+            assert(mm_lm_head_calls(candidate.value) == 1);
+            assert(mm_reset_stats(candidate.value) == 0);
+            assert(mm_configure_profile(candidate.value, 0) == 0);
+            assert_exact(evaluate(candidate.value, {1, 4}), expected);
+            assert(mm_get_stats(candidate.value, &stats) == 0);
+            assert(stats.lm_head_calls == 2);
+            assert(stats.qkv_ns == 0 && stats.remaining_ops_ns == 0);
+            assert(stats.controller_wait_ns == 0);
+            for (uint32_t i = 0; i < 64; ++i) assert(stats.participant_compute_ns[i] == 0);
+            // Restore the reference prefix for the next participant count.
+            assert(mm_reset(reference.value) == 0);
+            assert_exact(evaluate(reference.value, {1, 4}), expected);
+        }
+    }
+    assert(mm_configure_profile(nullptr, 1) == -1);
+    assert(mm_reset_stats(nullptr) == -1);
+    assert(mm_get_stats(nullptr, nullptr) == -1);
+    std::filesystem::remove(path);
+}
+
 int main() {
+    test_diagnostic_profile_contract();
     test_cache_reset_and_overflow();
     test_crc_and_truncation();
     test_rejects_malformed_metadata();

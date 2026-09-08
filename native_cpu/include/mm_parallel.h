@@ -14,7 +14,11 @@ namespace mm {
 class ParallelTeam final {
 public:
     static constexpr std::uint32_t kMaxThreads = 64;
-
+    struct Diagnostics {
+        std::array<std::uint64_t, kMaxThreads> participant_compute_ns{};
+        std::array<std::uint64_t, kMaxThreads> participant_compute_calls{};
+        std::uint64_t controller_wait_ns = 0;
+    };
     ParallelTeam() noexcept;
     ~ParallelTeam() noexcept;
 
@@ -38,6 +42,9 @@ public:
                   std::size_t rows, std::size_t cols, KernelMode mode);
     void gemv_q4(const std::uint8_t* packed, const float* scales, const float* x,
                  float* y, std::size_t rows, std::size_t cols, KernelMode mode);
+    void configure_profile(bool enabled) noexcept;
+    void reset_profile_stats() noexcept;
+    [[nodiscard]] Diagnostics profile_stats() const noexcept;
 
 private:
     struct Job;
@@ -49,6 +56,8 @@ private:
     std::uint32_t threads_ = 1;
     std::array<std::int32_t, kMaxThreads> cpus_{};
     std::array<std::uint32_t, kMaxThreads> weights_{};
+    bool profile_enabled_ = false;
+    Diagnostics diagnostics_{};
 };
 
 } // namespace mm

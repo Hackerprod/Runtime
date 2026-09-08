@@ -25,14 +25,47 @@ class FakeTokenizer:
 
 class FakeRuntime:
     max_context = 12
-    def __init__(self, sequence=(3,2)): self.sequence=list(sequence); self.calls=[]; self._pos=0
-    def reset(self): self._pos=0; self.calls.append(('reset',))
+    def __init__(self, sequence=(3,2)): self.sequence=list(sequence); self.calls=[]; self._pos=0; self._response_index=0
+    def reset(self): self._pos=0; self._response_index=0; self.calls.append(('reset',))
+    @property
+    def position(self): return self._pos
     def eval(self, ids):
-        self.calls.append(tuple(int(x) for x in ids)); x=np.full(32,-100.,dtype=np.float32); tok=self.sequence[min(self._pos,len(self.sequence)-1)]; x[tok]=100.; self._pos += 1; return x
+        ids = np.asarray(ids).reshape(-1)
+        self.calls.append(tuple(int(x) for x in ids)); x=np.full(32,-100.,dtype=np.float32); tok=self.sequence[min(self._response_index,len(self.sequence)-1)]; x[tok]=100.; self._response_index += 1; self._pos += len(ids); return x
     @property
     def backend(self): return 'fake'
 
 class ChatTests(unittest.TestCase):
+    def test_profile_phase_deltas_subtract_each_participant(self):
+        before = {"lm_head_calls": 3, "participant_compute_ns": [100, 90, 0]}
+        after = {"lm_head_calls": 5, "participant_compute_ns": [140, 120, 0]}
+        self.assertEqual(ChatSession._stats_delta(after, before),
+                         {"lm_head_calls": 2, "participant_compute_ns": [40, 30, 0]})
+
+    def test_head_counts_use_phase_deltas_even_without_statistics_reset(self):
+        class CumulativeRuntime(FakeRuntime):
+            heads = 100
+            @property
+            def stats(self): return {"lm_head_calls": self.heads}
+            def eval(self, ids):
+                result = super().eval(ids)
+                self.heads += len(ids)
+                return result
+        result = ChatSession(CumulativeRuntime(), FakeTokenizer(), context_limit=12,
+                             max_new_tokens=2).turn("a")
+        self.assertEqual(result.lm_head_calls, {"prefill": result.context_tokens, "decode": 1})
+
+    def test_zero_and_single_generated_token_are_not_decode_evaluations(self):
+        for maximum in (0, 1):
+            rt = FakeRuntime(sequence=(3, 2))
+            session = ChatSession(rt, FakeTokenizer(), context_limit=12, max_new_tokens=maximum)
+            result = session.turn("a")
+            self.assertEqual(result.generated_tokens, maximum)
+            self.assertEqual(result.decode_tokens_evaluated, 0)
+            self.assertEqual(result.sampled_ids, [] if maximum == 0 else [3])
+            self.assertEqual(result.lm_head_calls, None)
+            self.assertEqual(rt.position, result.prefill_tokens_evaluated)
+
     def test_chat_and_parity_profiles_have_explicit_defaults(self):
         from argparse import Namespace
 

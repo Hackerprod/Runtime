@@ -4,6 +4,7 @@
 #include "mm_parallel.h"
 
 #include <algorithm>
+#include <chrono>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -301,6 +302,9 @@ static std::unordered_map<std::string, Tensor> load_tensors(const std::vector<ui
 }
 
 struct Runtime {
+    enum class ProfileOp : std::uint32_t { Qkv, Attention, Output, Ffn, Vocab, Remaining };
+    MmRuntimeStats stats{};
+    bool profile_enabled = false;
     Config config;
     uint32_t max_context = 0;
     mm::KernelMode kernel_mode = mm::KernelMode::Scalar;
@@ -399,11 +403,22 @@ struct Runtime {
         for (size_t i = 0; i < size; ++i) output[i] = input[i] * inv * weight.f32[i];
     }
 
-    void gemv(const Tensor& weight, const float* input, float* output) {
+    void gemv(const Tensor& weight, const float* input, float* output, ProfileOp op = ProfileOp::Remaining) {
         const uint32_t rows = static_cast<uint32_t>(weight.rows());
         const uint32_t cols = static_cast<uint32_t>(weight.cols());
+        const auto started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         if (weight.dtype == 0) parallel.gemv_f32(weight.f32.data(), input, output, rows, cols, kernel_mode);
         else parallel.gemv_q4(weight.q4.data(), weight.scales.data(), input, output, rows, cols, kernel_mode);
+        if (profile_enabled) {
+            const auto ns = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count());
+            switch (op) {
+            case ProfileOp::Qkv: ++stats.qkv_calls; stats.qkv_ns += ns; break;
+            case ProfileOp::Output: ++stats.output_projection_calls; stats.output_projection_ns += ns; break;
+            case ProfileOp::Ffn: ++stats.ffn_calls; stats.ffn_ns += ns; break;
+            case ProfileOp::Vocab: ++stats.vocab_head_calls; stats.vocab_head_ns += ns; break;
+            default: ++stats.remaining_ops_calls; stats.remaining_ops_ns += ns; break;
+            }
+        }
     }
 
     void rotate(uint32_t pos) {
@@ -429,15 +444,20 @@ struct Runtime {
     }
 
     void step(int32_t token) {
+        const auto step_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        const auto qkv_before = stats.qkv_ns; const auto attn_before = stats.attention_kv_ns;
+        const auto output_before = stats.output_projection_ns; const auto ffn_before = stats.ffn_ns;
+        const auto vocab_before = stats.vocab_head_ns;
         const Tensor& embedding = tensor("model.embed_tokens.weight");
         std::copy_n(embedding.f32.data() + static_cast<size_t>(token) * config.hidden, config.hidden, hidden.data());
         for (uint32_t layer = 0; layer < config.layers; ++layer) {
             const LayerWeights& w = layers[layer];
+            if (profile_enabled) ++stats.remaining_ops_calls;
             std::copy(hidden.begin(), hidden.end(), residual.begin());
             rms_norm(hidden, *w.input_norm, config.rms_eps, normed);
-            gemv(*w.q_proj, normed.data(), q.data());
-            gemv(*w.k_proj, normed.data(), k.data());
-            gemv(*w.v_proj, normed.data(), v.data());
+            gemv(*w.q_proj, normed.data(), q.data(), ProfileOp::Qkv);
+            gemv(*w.k_proj, normed.data(), k.data(), ProfileOp::Qkv);
+            gemv(*w.v_proj, normed.data(), v.data(), ProfileOp::Qkv);
             for (uint32_t h = 0; h < config.q_heads; ++h) {
                 const size_t base = static_cast<size_t>(h) * config.head_dim;
                 rms_norm_ptr(q.data() + base, *w.q_norm, config.head_dim,
@@ -459,6 +479,7 @@ struct Runtime {
                     cache_v[cache_offset(layer, position, h, d)] = v[static_cast<size_t>(h) * config.head_dim + d];
                 }
             }
+            const auto attention_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             std::fill(attention.begin(), attention.end(), 0.0f);
             const float inv_sqrt = 1.0f / std::sqrt(static_cast<float>(config.head_dim));
             const uint32_t total = position + 1;
@@ -490,22 +511,32 @@ struct Runtime {
                     attention[static_cast<size_t>(h) * config.head_dim + d] = value;
                 }
             }
-            gemv(*w.o_proj, attention.data(), projection.data());
+            if (profile_enabled) {
+                stats.attention_kv_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - attention_started).count());
+                ++stats.attention_kv_calls;
+            }
+            gemv(*w.o_proj, attention.data(), projection.data(), ProfileOp::Output);
             for (uint32_t d = 0; d < config.hidden; ++d) hidden[d] = residual[d] + projection[d];
             rms_norm(hidden, *w.post_attention_norm, config.rms_eps, normed);
-            gemv(*w.gate_proj, normed.data(), intermediate.data());
-            gemv(*w.up_proj, normed.data(), ffn_up.data());
+            gemv(*w.gate_proj, normed.data(), intermediate.data(), ProfileOp::Ffn);
+            gemv(*w.up_proj, normed.data(), ffn_up.data(), ProfileOp::Ffn);
             for (uint32_t d = 0; d < config.intermediate; ++d) {
                 const float gate = intermediate[d];
                 intermediate[d] = (gate / (1.0f + std::exp(-gate))) * ffn_up[d];
             }
-            gemv(*w.down_proj, intermediate.data(), projection.data());
+            gemv(*w.down_proj, intermediate.data(), projection.data(), ProfileOp::Ffn);
             for (uint32_t d = 0; d < config.hidden; ++d) hidden[d] += projection[d];
         }
         rms_norm(hidden, tensor("model.norm.weight"), config.rms_eps, normed);
-        gemv(tensor("model.embed_tokens.weight"), normed.data(), logits.data());
+        ++stats.lm_head_calls;
+        gemv(tensor("model.embed_tokens.weight"), normed.data(), logits.data(), ProfileOp::Vocab);
         for (float value : logits) if (!std::isfinite(value)) throw std::runtime_error("non-finite logits");
         ++position;
+        if (profile_enabled) {
+            const auto total = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - step_started).count());
+            const auto covered = (stats.qkv_ns-qkv_before)+(stats.attention_kv_ns-attn_before)+(stats.output_projection_ns-output_before)+(stats.ffn_ns-ffn_before)+(stats.vocab_head_ns-vocab_before);
+            stats.remaining_ops_ns += total > covered ? total-covered : 0;
+        }
     }
 };
 
@@ -582,6 +613,43 @@ MM_RUNTIME_API uint32_t mm_position(void* runtime) {
 MM_RUNTIME_API const char* mm_backend(void* runtime) {
     static const char* invalid = "invalid";
     try { return checked_runtime(runtime)->backend.c_str(); } catch (...) { return invalid; }
+}
+
+MM_RUNTIME_API int mm_configure_profile(void* runtime, int enabled) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        model->profile_enabled = enabled != 0;
+        model->parallel.configure_profile(model->profile_enabled);
+        return 0;
+    } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_reset_stats(void* runtime) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        model->stats = {};
+        model->parallel.reset_profile_stats();
+        return 0;
+    } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_get_stats(void* runtime, MmRuntimeStats* out_stats) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (out_stats == nullptr) return -1;
+        *out_stats = model->stats;
+        const auto parallel = model->parallel.profile_stats();
+        for (std::size_t i = 0; i < 64; ++i) {
+            out_stats->participant_compute_ns[i] = parallel.participant_compute_ns[i];
+            out_stats->participant_compute_calls[i] = parallel.participant_compute_calls[i];
+        }
+        out_stats->controller_wait_ns = parallel.controller_wait_ns;
+        return 0;
+    } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API uint64_t mm_lm_head_calls(void* runtime) {
+    try { return checked_runtime(runtime)->stats.lm_head_calls; } catch (...) { return 0; }
 }
 
 MM_RUNTIME_API int mm_configure_threads(void* runtime, uint32_t threads,

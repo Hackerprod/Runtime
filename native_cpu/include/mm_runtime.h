@@ -29,6 +29,20 @@ MM_RUNTIME_API uint32_t mm_vocab_size(void* runtime);
 MM_RUNTIME_API uint32_t mm_position(void* runtime);
 MM_RUNTIME_API const char* mm_backend(void* runtime);
 
+typedef struct MmRuntimeStats {
+    uint64_t lm_head_calls;
+    uint64_t qkv_calls, attention_kv_calls, output_projection_calls;
+    uint64_t ffn_calls, vocab_head_calls, remaining_ops_calls;
+    uint64_t qkv_ns, attention_kv_ns, output_projection_ns;
+    uint64_t ffn_ns, vocab_head_ns, remaining_ops_ns;
+    uint64_t participant_compute_ns[64], controller_wait_ns;
+    uint64_t participant_compute_calls[64];
+} MmRuntimeStats;
+MM_RUNTIME_API int mm_configure_profile(void* runtime, int enabled);
+MM_RUNTIME_API int mm_reset_stats(void* runtime);
+MM_RUNTIME_API int mm_get_stats(void* runtime, MmRuntimeStats* out_stats);
+MM_RUNTIME_API uint64_t mm_lm_head_calls(void* runtime);
+
 /* Configure the persistent row-sharding GEMV worker team. threads is in
  * [1, 64] total participants. Participant 0 is the caller during mm_eval;
  * remaining participants are persistent workers. A null CPU array leaves

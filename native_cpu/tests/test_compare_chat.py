@@ -18,12 +18,19 @@ class FakeRuntime:
         self.reset_calls = 0
         self.eval_calls = []
         self.closed = False
+        self._position = 0
 
     def reset(self):
         self.reset_calls += 1
+        self._position = 0
+
+    @property
+    def position(self):
+        return self._position
 
     def eval(self, ids):
         self.eval_calls.append(np.asarray(ids).copy())
+        self._position += int(np.asarray(ids).size)
         values = np.full(self.vocab_size, -10.0, dtype=np.float32)
         values[3] = 10.0
         return values
@@ -83,20 +90,45 @@ class ComparePolicyTests(unittest.TestCase):
 class CountedRuntimeTests(unittest.TestCase):
     def test_counts_prefill_separately_from_decode(self):
         counted = compare.CountedRuntime(FakeRuntime())
-        counted.reset()
+        counted.reset(); counted.begin_turn(); counted.set_phase("prefill")
         counted.eval([1, 2, 3])
+        counted.set_phase("decode")
         counted.eval([4])
         self.assertEqual(counted.eval_calls, 2)
         self.assertEqual(counted.decode_eval_steps, 1)
         self.assertEqual(counted.decode_evaluated_tokens, 1)
 
-    def test_reset_clears_counters_and_delegates(self):
+    def test_reset_only_resets_model_state(self):
         runtime = FakeRuntime()
         counted = compare.CountedRuntime(runtime)
+        counted.begin_turn(); counted.set_phase("prefill")
         counted.eval([1])
         counted.reset()
         self.assertEqual(runtime.reset_calls, 1)
-        self.assertEqual((counted.eval_calls, counted.decode_eval_steps), (0, 0))
+        self.assertEqual((counted.eval_calls, counted.decode_eval_steps), (1, 0))
+
+    def test_explicit_phase_counts_tokens_not_calls(self):
+        counted = compare.CountedRuntime(FakeRuntime())
+        counted.begin_turn(); counted.set_phase("prefill"); counted.eval([1, 2, 3]); counted.eval([4, 5])
+        counted.set_phase("decode"); counted.eval([6]); counted.eval([7, 8])
+        self.assertEqual(counted.prefill_evaluated_tokens, 5)
+        self.assertEqual(counted.decode_evaluated_tokens, 3)
+        self.assertEqual(counted.decode_eval_steps, 2)
+
+    def test_eval_requires_explicit_phase(self):
+        runtime = FakeRuntime(); counted = compare.CountedRuntime(runtime); counted.begin_turn()
+        with self.assertRaises(RuntimeError): counted.eval([1])
+        self.assertEqual(runtime.eval_calls, [])
+
+    def test_set_phase_rejects_invalid_without_state_change(self):
+        counted = compare.CountedRuntime(FakeRuntime()); counted.begin_turn()
+        with self.assertRaises(ValueError): counted.set_phase("unknown")
+        self.assertIsNone(counted.phase)
+
+    def test_reset_does_not_clear_counters(self):
+        counted = compare.CountedRuntime(FakeRuntime()); counted.begin_turn(); counted.set_phase("decode"); counted.eval([1, 2])
+        counted.reset()
+        self.assertEqual(counted.decode_evaluated_tokens, 2)
 
 
 class CompareMetricsTests(unittest.TestCase):

@@ -56,6 +56,24 @@ def validate_messages(messages):
 @dataclass
 class ChatResponse:
     text: str; generated_tokens: int; context_tokens: int; ttft_seconds: float; decode_seconds: float; backend: str
+    # Stage-1 telemetry is additive: callers constructing the historical
+    # six-field response remain valid.
+    prompt_tokens_total: int = 0
+    prefix_tokens_reused: int = 0
+    prefill_tokens_evaluated: int = 0
+    decode_tokens_evaluated: int = 0
+    lm_head_calls: object = None
+    position_before: object = None
+    position_after: object = None
+    cache_action: object = None
+    prompt_prepare_seconds: float = 0.0
+    prefill_seconds: float = 0.0
+    native_generation_seconds: float = 0.0
+    sampling_seconds: float = 0.0
+    total_seconds: float = 0.0
+    sampled_ids: object = None
+    metrics: object = None
+    native_phase_stats: object = None
 
 def sample_logits(logits, rng, *, temperature=0.0, top_k=0, top_p=1.0):
     # Use a widened working buffer for stable sampling math.  Candidate masks
@@ -138,20 +156,82 @@ class ChatSession:
             if start + 1 >= len(current) - 1 or current[start]["role"] != "user" or current[start + 1]["role"] != "assistant": raise ChatError("current turn does not fit context limit")
             del current[start:start + 2]
     def _sample(self, logits): return sample_logits(logits, self.rng, temperature=self.temperature, top_k=self.top_k, top_p=self.top_p)
+    def _stats_snapshot(self):
+        try:
+            value = getattr(self.runtime, "stats", None)
+            if callable(value): value = value()
+            return dict(value) if isinstance(value, Mapping) else None
+        except (AttributeError, RuntimeError, ValueError):
+            return None
+    @staticmethod
+    def _stats_delta(after, before):
+        if not isinstance(after, Mapping): return None
+        if not isinstance(before, Mapping): return None
+        out = {}
+        for key, value in after.items():
+            old = before.get(key, 0)
+            if isinstance(value, Mapping) and isinstance(old, Mapping): out[key] = ChatSession._stats_delta(value, old)
+            elif isinstance(value, list) and isinstance(old, list) and len(value) == len(old):
+                out[key] = [current - previous for current, previous in zip(value, old)]
+            elif isinstance(value, (int, float)) and isinstance(old, (int, float)): out[key] = value - old
+            else: out[key] = value
+        return out
     def turn(self, user):
         if not isinstance(user, str) or not user.strip(): raise ChatError("user message is empty")
+        turn_start = time.perf_counter(); prepare_started = turn_start
         current, ids = self._bounded(user)
         if not ids: raise ChatError("empty rendered prompt")
-        self.runtime.reset(); start = time.perf_counter(); logits = self.runtime.eval(np.asarray(ids, dtype=np.int32)); ttft = time.perf_counter() - start
-        generated = []; eos = int(getattr(self.tokenizer, "eos_token_id", 2) or 2); start = time.perf_counter()
+        prepare_seconds = time.perf_counter() - prepare_started
+        try: position_before = self.runtime.position
+        except (AttributeError, RuntimeError): position_before = None
+        self.runtime.reset()
+        # Reset counters independently from model state.  Native R1 runtimes
+        # expose reset_stats; the fallback wrapper implements the same hook.
+        reset_stats = getattr(self.runtime, "begin_turn", None) or getattr(self.runtime, "reset_stats", None)
+        if reset_stats is not None: reset_stats()
+        stats_before = self._stats_snapshot()
+        set_phase = getattr(self.runtime, "set_phase", None)
+        if set_phase is not None: set_phase("prefill")
+        prefill_started = time.perf_counter(); logits = self.runtime.eval(np.asarray(ids, dtype=np.int32)); ttft = time.perf_counter() - prefill_started
+        prefill_stats = self._stats_snapshot()
+        generated = []; sampled_ids = []; eos = int(getattr(self.tokenizer, "eos_token_id", 2) or 2)
+        sampling_seconds = 0.0; native_generation_seconds = 0.0; decode_evaluated = 0
+        set_phase and set_phase("decode")
+        decode_started = time.perf_counter()
         for index in range(self.max_new_tokens):
+            sample_started = time.perf_counter()
             token = self._sample(logits)
+            sampling_seconds += time.perf_counter() - sample_started
+            sampled_ids.append(int(token))
             if token == eos: break
             generated.append(token)
-            if index + 1 < self.max_new_tokens: logits = self.runtime.eval(np.asarray([token], dtype=np.int32))
-        decode = time.perf_counter() - start; text = self.tokenizer.decode(generated, skip_special_tokens=True)
+            if index + 1 < self.max_new_tokens:
+                native_started = time.perf_counter(); logits = self.runtime.eval(np.asarray([token], dtype=np.int32)); native_generation_seconds += time.perf_counter() - native_started; decode_evaluated += 1
+        decode = time.perf_counter() - decode_started; text = self.tokenizer.decode(generated, skip_special_tokens=True)
         self.messages = current + [{"role":"assistant", "content":text}]
-        return ChatResponse(text, len(generated), len(ids), ttft, decode, self.runtime.backend)
+        position_after = getattr(self.runtime, "position", None)
+        native_stats = self._stats_snapshot() or {}
+        native_phase_stats = {"prefill": self._stats_delta(prefill_stats, stats_before),
+                              "decode": self._stats_delta(native_stats, prefill_stats)}
+        lm_heads = None
+        if all(isinstance(native_phase_stats[phase], Mapping) and
+               "lm_head_calls" in native_phase_stats[phase] for phase in ("prefill", "decode")):
+            lm_heads = {phase: native_phase_stats[phase]["lm_head_calls"] for phase in ("prefill", "decode")}
+        total = time.perf_counter() - turn_start
+        metrics = {"prompt_tokens_total": len(ids), "prefix_tokens_reused": 0,
+                   "prefill_tokens_evaluated": len(ids), "decode_tokens_evaluated": decode_evaluated,
+                   "generated_tokens": len(generated), "lm_head_calls": lm_heads,
+                   "position_before": position_before, "position_after": position_after,
+                   "cache_action": {"action": "reset", "reason": "stage1_no_kv_reuse"},
+                   "prompt_prepare_seconds": prepare_seconds, "prefill_seconds": ttft,
+                   "native_generation_seconds": native_generation_seconds,
+                   "sampling_seconds": sampling_seconds, "total_seconds": total,
+                   "sampled_ids": sampled_ids, "native": native_stats,
+                   "native_phase_stats": native_phase_stats}
+        return ChatResponse(text, len(generated), len(ids), ttft, decode, self.runtime.backend,
+                            len(ids), 0, len(ids), decode_evaluated, lm_heads, position_before, position_after,
+                            metrics["cache_action"], prepare_seconds, ttft, native_generation_seconds,
+                            sampling_seconds, total, sampled_ids, metrics, native_phase_stats)
     def clear(self):
         self.runtime.reset(); self.messages = [self.messages[0]] if self.messages and self.messages[0]["role"] == "system" else []; self.rng = np.random.default_rng(self.seed)
 
@@ -169,6 +249,23 @@ def _response_json(r, args):
         "top_k": args.top_k,
         "top_p": args.top_p,
         "seed": args.seed,
+        "metrics": r.metrics,
+        "prompt_tokens_total": r.prompt_tokens_total,
+        "prefix_tokens_reused": r.prefix_tokens_reused,
+        "prefill_tokens_evaluated": r.prefill_tokens_evaluated,
+        "decode_tokens_evaluated": r.decode_tokens_evaluated,
+        "lm_head_calls": r.lm_head_calls,
+        "position_before": r.position_before,
+        "position_after": r.position_after,
+        "cache_action": r.cache_action,
+        "prompt_prepare_seconds": r.prompt_prepare_seconds,
+        "prefill_seconds": r.prefill_seconds,
+        "native_generation_seconds": r.native_generation_seconds,
+        "sampling_seconds": r.sampling_seconds,
+        "total_seconds": r.total_seconds,
+        "sampled_ids": r.sampled_ids,
+        "native_phase_stats": r.native_phase_stats,
+        "diagnostics": bool(getattr(args, "diagnostics", False)),
     }
 
 
@@ -203,6 +300,7 @@ def main(argv=None):
     p.add_argument("--system")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--metrics-json", action="store_true")
+    p.add_argument("--diagnostics", action="store_true", help="enable native diagnostic profiling (off by default)")
     args = _resolve_profile(p.parse_args(argv))
     if args.max_new_tokens < 0: p.error("--max-new-tokens must be non-negative")
     if args.context_limit < 2: p.error("--context-limit must be at least 2")
@@ -212,6 +310,8 @@ def main(argv=None):
         os.environ.setdefault("USE_TF", "0")
         tokenizer = load_local_tokenizer(args.tokenizer)
         with NativeRuntime(args.model,args.library,args.context_limit) as runtime:
+            configure = getattr(runtime, "configure_profile", None)
+            if configure is not None: configure(bool(args.diagnostics))
             session = ChatSession(runtime, tokenizer, context_limit=args.context_limit,
                                   max_new_tokens=args.max_new_tokens,
                                   temperature=args.temperature, top_k=args.top_k,

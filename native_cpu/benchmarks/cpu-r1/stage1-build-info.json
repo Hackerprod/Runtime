@@ -1,0 +1,26 @@
+{
+  "build_type": "Release",
+  "cmake": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+  "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /EHsc /fp:precise /std:c++20",
+  "compiler": {
+    "id": "MSVC",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+    "version": "19.50.35727.0"
+  },
+  "generator": "Visual Studio 18 2026",
+  "library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\minimind_cpu.dll",
+  "library_sha256": "f8a53c414602e2c31cc13cc5a2407fe726d4b392402cbec24eb21f72067f9f0a",
+  "native_sources_sha256": {
+    "native_cpu/CMakeLists.txt": "5f460690b76922b7bb5785c12fee9bd1715d8a87508968aa1868f9c34e885166",
+    "native_cpu/include/mm_kernels.h": "b6c07a29316bbc98eeb209ed62c26eafc2f130b1a1e10fdfbc0aab3255654b4f",
+    "native_cpu/include/mm_parallel.h": "9553dfa8212e43977c3502cb9f51d603192641d51fe9aa4e552bffc41e73a20d",
+    "native_cpu/include/mm_runtime.h": "226b264d23ed787db0f910fc1887af8ade23a33401928ab8212303d30ac9d6c2",
+    "native_cpu/src/kernels.cpp": "1afcf2844a5917a39cc52907ce0033fd7793153863df79ee236827f7190bfdd4",
+    "native_cpu/src/parallel.cpp": "c9bdd91cec7858cd7246c11f8e6774a2e4cd5d35e7c10fb097200caf81a20a8f",
+    "native_cpu/src/runtime.cpp": "6d72836493c8279baa56488e532b70acc6ec27010c17acc432ae3f44ceec78d3",
+    "native_cpu/tests/test_kernels.cpp": "e5414578bac4a5f3decd6e24efb85939bb5f30766c8b45796c76fa0beb01e5f7",
+    "native_cpu/tests/test_runtime.cpp": "bbe3b5763ad82e5e532e411d8dc548feb1d0bff2c486c7f7981bad66ace6237f"
+  },
+  "native_threads": 1,
+  "schema_version": 1
+}

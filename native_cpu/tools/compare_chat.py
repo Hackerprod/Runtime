@@ -6,6 +6,7 @@ import operator
 from pathlib import Path
 import sys
 import time
+from collections.abc import Mapping
 import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
@@ -61,13 +62,38 @@ class OriginalRuntime:
     def close(self): self._cache, self._model, self._closed = None, None, True
 
 class CountedRuntime:
-    def __init__(self, runtime): self.runtime = runtime; self.eval_calls = self.decode_eval_steps = self.decode_evaluated_tokens = 0
+    def __init__(self, runtime):
+        self.runtime = runtime; self.eval_calls = self.decode_eval_steps = self.decode_evaluated_tokens = 0
+        self.prefill_evaluated_tokens = 0; self.phase = None
     def __getattr__(self, name): return getattr(self.runtime, name)
-    def reset(self): self.runtime.reset(); self.eval_calls = self.decode_eval_steps = self.decode_evaluated_tokens = 0
+    def reset(self):
+        self.runtime.reset()
+    def begin_turn(self):
+        self.eval_calls = self.decode_eval_steps = self.decode_evaluated_tokens = 0
+        self.prefill_evaluated_tokens = 0; self.phase = None
+        fn = getattr(self.runtime, "reset_stats", None)
+        if fn is not None: fn()
+    reset_stats = begin_turn
+    def set_phase(self, phase):
+        if phase not in {"prefill", "decode"}:
+            raise ValueError("phase must be prefill or decode")
+        self.phase = phase
     def eval(self, ids):
+        if self.phase not in {"prefill", "decode"}:
+            raise RuntimeError("evaluation phase must be explicitly set to prefill or decode")
         logits = self.runtime.eval(ids)
-        if self.eval_calls: self.decode_eval_steps += 1; self.decode_evaluated_tokens += int(np.asarray(ids).size)
+        count = int(np.asarray(ids).size)
+        if self.phase == "decode": self.decode_eval_steps += 1; self.decode_evaluated_tokens += count
+        elif self.phase == "prefill": self.prefill_evaluated_tokens += count
         self.eval_calls += 1; return logits
+    @property
+    def stats(self):
+        try:
+            value = getattr(self.runtime, "stats", {})
+            if callable(value): value = value()
+            return dict(value) if isinstance(value, Mapping) else {}
+        except (AttributeError, RuntimeError, ValueError):
+            return {}
 
 def _require_file(path, label, flag):
     if not Path(path).is_file(): raise FileNotFoundError(f"Missing {label}: {path}. Restore the prepared file or pass {flag}; no download or build is performed automatically.")
@@ -94,6 +120,8 @@ def build_session(args):
         else:
             _require_file(args.checkpoint_dir / "model.safetensors", "official weights", "--checkpoint-dir")
             runtime = OriginalRuntime(args.checkpoint_dir, args.context_limit)
+        configure = getattr(runtime, "configure_profile", None)
+        if configure is not None: configure(bool(getattr(args, "diagnostics", False)))
         counted = CountedRuntime(runtime)
         session = ChatSession(counted, tokenizer, context_limit=args.context_limit, max_new_tokens=args.max_new_tokens,
                               temperature=args.temperature, seed=args.seed, system=getattr(args, "system", None),
@@ -113,6 +141,19 @@ def response_metrics(args, result, counted, loading_seconds):
             "generated_tokens": result.generated_tokens, "context_tokens": result.context_tokens,
             "loading_seconds": loading_seconds, "prefill_seconds": result.ttft_seconds, "decode_seconds": result.decode_seconds,
             "decode_eval_steps": counted.decode_eval_steps, "decode_evaluated_tokens": counted.decode_evaluated_tokens,
+            "prompt_tokens_total": getattr(result, "prompt_tokens_total", result.context_tokens),
+            "prefix_tokens_reused": getattr(result, "prefix_tokens_reused", 0),
+            "prefill_tokens_evaluated": getattr(result, "prefill_tokens_evaluated", result.context_tokens),
+            "decode_tokens_evaluated": getattr(result, "decode_tokens_evaluated", counted.decode_evaluated_tokens),
+            "lm_head_calls": getattr(result, "lm_head_calls", None),
+            "position_before": getattr(result, "position_before", None), "position_after": getattr(result, "position_after", None),
+            "cache_action": getattr(result, "cache_action", None),
+            "prompt_prepare_seconds": getattr(result, "prompt_prepare_seconds", 0.0),
+            "native_generation_seconds": getattr(result, "native_generation_seconds", 0.0),
+            "sampling_seconds": getattr(result, "sampling_seconds", 0.0), "total_seconds": getattr(result, "total_seconds", 0.0),
+            "sampled_ids": getattr(result, "sampled_ids", None), "diagnostics": getattr(args, "diagnostics", False),
+            "native_stats": getattr(counted, "stats", {}),
+            "native_phase_stats": getattr(result, "native_phase_stats", None),
             "decode_tokens_per_second": counted.decode_evaluated_tokens / result.decode_seconds if counted.decode_evaluated_tokens and result.decode_seconds > 0 else None,
             "finish_reason": "eos" if result.generated_tokens < args.max_new_tokens else "length"}
 
@@ -138,6 +179,7 @@ def make_parser():
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL); parser.add_argument("--library", type=Path, default=DEFAULT_LIBRARY); parser.add_argument("--checkpoint-dir", type=Path, default=DEFAULT_CHECKPOINT); parser.add_argument("--tokenizer", type=Path)
     parser.add_argument("--context-limit", type=int, default=2048); parser.add_argument("--max-new-tokens", type=int, default=256); parser.add_argument("--temperature", type=float); parser.add_argument("--top-k", type=int); parser.add_argument("--top-p", type=float); parser.add_argument("--system"); parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--threads", type=int, default=1, help="native compute participants including caller (1-64)")
+    parser.add_argument("--diagnostics", action="store_true", help="enable native diagnostic profiling (off by default)")
     parser.add_argument("--cpus", help="comma-separated Windows group-0 logical CPU indices in participant order")
     parser.add_argument("--row-weights", dest="row_weights", help="comma-separated positive native row-shard weights")
     return parser

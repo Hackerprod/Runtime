@@ -117,6 +117,7 @@ struct ParallelTeam::Job {
 };
 
 struct ParallelTeam::State {
+    struct alignas(64) ProfileSlot { std::uint64_t ns = 0; std::uint64_t calls = 0; };
     struct Range {
         std::size_t begin = 0;
         std::size_t end = 0;
@@ -141,6 +142,9 @@ struct ParallelTeam::State {
     bool startup_release = false;
     bool startup_failed = false;
     std::atomic<bool> stop{false};
+    std::atomic<bool> profile_enabled{false};
+    std::array<ProfileSlot, kMaxThreads> participant_slots{};
+    std::uint64_t controller_wait_ns = 0;
     std::uint32_t startup_failed_worker = kMaxThreads;
     ParallelTeam::Job job{};
     AffinityGuard caller_affinity;
@@ -168,12 +172,15 @@ struct ParallelTeam::State {
         caller_affinity.restore();
     }
 
-    static void run_range(const ParallelTeam::Job& job, const Range& range) noexcept {
+    static void run_range(const ParallelTeam::Job& job, const Range& range, State* state = nullptr, std::uint32_t participant = 0) noexcept {
         if (range.begin >= range.end) return;
+        const bool profiled = state != nullptr && state->profile_enabled.load(std::memory_order_relaxed);
+        const auto started = profiled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         if (job.kind == ParallelTeam::Job::Kind::F32) {
             mm::gemv_f32(job.weights + range.begin * job.cols, job.x,
                          job.y + range.begin, range.end - range.begin,
                          job.cols, job.mode);
+            if (profiled) { state->participant_slots[participant].ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count()); ++state->participant_slots[participant].calls; }
             return;
         }
         const std::size_t row_bytes = (job.cols + 1u) / 2u;
@@ -182,6 +189,7 @@ struct ParallelTeam::State {
                     job.scales + range.begin * groups, job.x,
                     job.y + range.begin, range.end - range.begin,
                     job.cols, job.mode);
+        if (profiled) { state->participant_slots[participant].ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count()); ++state->participant_slots[participant].calls; }
     }
 
     static void worker_main(State* state, std::uint32_t index) noexcept {
@@ -242,7 +250,7 @@ struct ParallelTeam::State {
             const Range range = state->ranges[index];
             seen_generation = published;
 
-            run_range(job, range);
+            run_range(job, range, state, index);
 
             state->completions[index].epoch.store(seen_generation, std::memory_order_release);
             state->completions[index].epoch.notify_one();
@@ -322,9 +330,10 @@ struct ParallelTeam::State {
         // Participant zero is the caller. It computes its disjoint first
         // range while background workers handle ranges 1..N-1.
         const Job caller_job = job;
-        run_range(caller_job, ranges[0]);
+        run_range(caller_job, ranges[0], this, 0);
         completions[0].epoch.store(epoch, std::memory_order_release);
 
+        const auto wait_started = profile_enabled.load(std::memory_order_relaxed) ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         for (std::uint32_t index = 1; index < threads; ++index) {
             unsigned spin = 0;
             auto spin_deadline = std::chrono::steady_clock::now() + kControllerSpinBudget;
@@ -342,6 +351,7 @@ struct ParallelTeam::State {
                 completed = completions[index].epoch.load(std::memory_order_acquire);
             }
         }
+        if (profile_enabled.load(std::memory_order_relaxed)) controller_wait_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - wait_started).count());
     }
 };
 
@@ -402,6 +412,7 @@ void ParallelTeam::configure(std::uint32_t threads, const std::uint32_t* cpu_ind
     std::unique_ptr<State> candidate;
     if (threads > 1 || cpu_indices != nullptr) {
         candidate = std::make_unique<State>(threads, next_cpus, next_weights);
+        candidate->profile_enabled.store(profile_enabled_, std::memory_order_release);
         candidate->start();
     }
 
@@ -433,14 +444,38 @@ std::uint32_t ParallelTeam::thread_weight(std::uint32_t worker) const noexcept {
 
 void ParallelTeam::dispatch(const Job& job) {
     if (state_ == nullptr) {
+        const auto started = profile_enabled_ ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         if (job.kind == Job::Kind::F32) {
             mm::gemv_f32(job.weights, job.x, job.y, job.rows, job.cols, job.mode);
         } else {
             mm::gemv_q4(job.packed, job.scales, job.x, job.y, job.rows, job.cols, job.mode);
         }
+        if (profile_enabled_) { diagnostics_.participant_compute_ns[0] += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count()); diagnostics_.participant_compute_calls[0]++; }
         return;
     }
     state_->dispatch(job);
+}
+
+void ParallelTeam::configure_profile(bool enabled) noexcept {
+    profile_enabled_ = enabled;
+    if (state_) state_->profile_enabled.store(enabled, std::memory_order_release);
+}
+
+void ParallelTeam::reset_profile_stats() noexcept {
+    diagnostics_ = {};
+    if (state_) {
+        for (auto& slot : state_->participant_slots) slot = {};
+        state_->controller_wait_ns = 0;
+    }
+}
+
+ParallelTeam::Diagnostics ParallelTeam::profile_stats() const noexcept {
+    Diagnostics result = diagnostics_;
+    if (state_) {
+        for (std::size_t i = 0; i < kMaxThreads; ++i) { result.participant_compute_ns[i] = state_->participant_slots[i].ns; result.participant_compute_calls[i] = state_->participant_slots[i].calls; }
+        result.controller_wait_ns = state_->controller_wait_ns;
+    }
+    return result;
 }
 
 void ParallelTeam::gemv_f32(const float* weights, const float* x, float* y,

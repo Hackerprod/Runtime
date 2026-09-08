@@ -59,7 +59,8 @@ FP32 kernels, weights, and math are unchanged. The caller's CPU affinity is
 scoped to each `mm_eval` and restored afterward; the background worker spins
 during an active evaluation and parks between requests. CPU-energy tradeoffs
 were not measured, and this profile is not a universal speed claim. The
-serial `Native_CPP.cmd` remains the default comparison launcher.
+one-participant consolidated CPU-U1 route remains the default comparison
+launcher; T0 affinity is still explicit.
 
 CPU-R4.1 restores the pre-CPU-R4 binary layout of `MmRuntimeStats` (1,136
 bytes on x64). Its Q·K diagnostic is queried separately through the optional

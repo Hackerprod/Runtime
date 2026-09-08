@@ -1,0 +1,35 @@
+{
+  "case": {
+    "key": "cpu-u1-forced-1792",
+    "workload": "forced",
+    "length": 1792
+  },
+  "pairs": 6,
+  "parity": true,
+  "orders": [
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ]
+  ]
+}

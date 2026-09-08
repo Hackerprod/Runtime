@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "experiment": "CPU-U1 consolidated production route",
+  "source_commit": "06694632cfe4ee5b97013d6a5b2e6fec9fe98f50",
+  "reference_source_commit": "ae90d82e6007574628d496eba898cdffce2b8096",
+  "candidate_library": "native_cpu/build/Release/minimind_cpu.dll",
+  "candidate_library_sha256": "494eb6bc48afe1ecd41f532b6a4c3a2310ef2b8e73408fc8809b32bcf6ebca2a",
+  "reference_library": "native_cpu/validation/cpu-u1/reference/minimind_cpu.dll",
+  "reference_library_sha256": "5261fef560537f48bc215890a14288edef2f5c78bda50e7a87cb2cb88fe0daeb",
+  "compiler": "MSVC 19.50 / Release / x64",
+  "build_command": "msbuild native_cpu/build/minimind_cpu.vcxproj /p:Configuration=Release /p:Platform=x64",
+  "production_route": {
+    "selective_logits": true,
+    "reuse_kv": true,
+    "v_blocked_attention": true,
+    "gqa_k_shared": true,
+    "gqa_v_shared": true,
+    "ffn_f16_storage": true,
+    "ffn_row4": false,
+    "launcher_switches": false
+  },
+  "preparation": {
+    "ffn_f16_storage_bytes": 89653248,
+    "reported_inference_excluded": true
+  }
+}

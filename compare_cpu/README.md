@@ -24,8 +24,8 @@ Examples from PowerShell opened in this folder:
 .\Native_CPP_T0.cmd --prompt "Explain a CPU cache." --metrics-json
 ```
 
-`Native_CPP.cmd` is the serial baseline. `Native_CPP_T0.cmd` delegates to it
-with the selected laptop profile: two total native participants (caller plus
+`Native_CPP.cmd` runs the consolidated CPU-U1 production route with one native
+participant by default. `Native_CPP_T0.cmd` delegates to it with the selected laptop profile: two total native participants (caller plus
 one persistent worker), logical CPUs `0,6` in Windows group 0, and contiguous
 row-shard weights `1332,992`. This is specific to the Ryzen AI 5 330 test laptop,
 where logical CPU 0 is the fast physical-core anchor and logical CPU 6 is the
@@ -44,8 +44,8 @@ python -m native_cpu.tools.compare_chat --backend native --threads 2 --cpus 0,6 
 in participant order, and `--row-weights` controls contiguous row ownership.
 If overriding the T0 launcher's thread count, provide matching CPU and weight
 lists; use `Native_CPP.cmd --threads N` for an unbound, equally weighted team. The original
-PyTorch launcher rejects non-default native-only options; the serial native
-launcher remains available for the old DLL.
+PyTorch launcher rejects non-default native-only options. The historical
+optimization switches are no longer exposed by the current executable.
 
 For the original numerical-comparison policy, explicitly add `--profile parity`.
 It uses no system message and greedy decoding (temperature 0, top-k 0, top-p 1).

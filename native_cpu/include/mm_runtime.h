@@ -54,6 +54,9 @@ MM_RUNTIME_API int mm_ffn_row4(void* runtime);
 MM_RUNTIME_API int mm_configure_ffn_f16_storage(void* runtime, int enabled);
 MM_RUNTIME_API int mm_ffn_f16_storage(void* runtime);
 MM_RUNTIME_API int mm_f16c_available(void);
+/* Optional CPU-U1 preparation diagnostics. Missing symbols mean unavailable. */
+MM_RUNTIME_API int mm_get_ffn_f16_storage_bytes(void* runtime, uint64_t* out_bytes);
+MM_RUNTIME_API int mm_get_ffn_f16_prepare_ns(void* runtime, uint64_t* out_ns);
 MM_RUNTIME_API int mm_configure_gqa_k_shared(void* runtime, int enabled);
 MM_RUNTIME_API int mm_gqa_k_shared(void* runtime);
 MM_RUNTIME_API int mm_configure_gqa_v_shared(void* runtime, int enabled);

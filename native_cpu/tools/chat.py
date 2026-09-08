@@ -389,15 +389,7 @@ def main(argv=None):
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--metrics-json", action="store_true")
     p.add_argument("--diagnostics", action="store_true", help="enable native diagnostic profiling (off by default)")
-    p.add_argument("--selective-logits", action="store_true", help="evaluate vocabulary logits only when requested")
-    p.add_argument("--reuse-kv", action="store_true", help="reuse verified KV prefixes between turns")
-    p.add_argument("--v-blocked-attention", action="store_true", help="use experimental contiguous-dimension V accumulation (off by default)")
-    p.add_argument("--ffn-row4", action="store_true", help="use experimental four-row FP32 FFN GEMV (off by default)")
-    p.add_argument("--ffn-f16-storage", action="store_true", help="use exact FP16-storage/FP32-compute FFN GEMV (off by default)")
-    p.add_argument("--gqa-k-shared", action="store_true", help="share K reads across the two GQA query heads (off by default)")
-    p.add_argument("--gqa-v-shared", action="store_true", help="share V reads across the two GQA query heads (off by default)")
     args = _resolve_profile(p.parse_args(argv))
-    if args.ffn_row4 and args.ffn_f16_storage: p.error("--ffn-row4 and --ffn-f16-storage are mutually exclusive")
     if args.max_new_tokens < 0: p.error("--max-new-tokens must be non-negative")
     if args.context_limit < 2: p.error("--context-limit must be at least 2")
     if not np.isfinite(args.temperature) or args.temperature < 0 or args.top_k < 0 or not np.isfinite(args.top_p) or not 0 < args.top_p <= 1: p.error("sampling parameters must be finite and valid")
@@ -408,28 +400,19 @@ def main(argv=None):
         with NativeRuntime(args.model,args.library,args.context_limit) as runtime:
             configure = getattr(runtime, "configure_profile", None)
             if configure is not None: configure(bool(args.diagnostics))
-            selective = getattr(runtime, "configure_selective_logits", None)
-            if args.selective_logits and selective is None: raise NativeError("native runtime does not support selective logits")
-            if selective is not None: selective(bool(args.selective_logits))
-            v_blocked = getattr(runtime, "configure_v_blocked_attention", None)
-            if args.v_blocked_attention and v_blocked is None: raise NativeError("native runtime does not support V-blocked attention")
-            if v_blocked is not None: v_blocked(bool(args.v_blocked_attention))
-            ffn_row4 = getattr(runtime, "configure_ffn_row4", None)
-            if args.ffn_row4 and ffn_row4 is None: raise NativeError("native runtime does not support FFN row4")
-            if ffn_row4 is not None: ffn_row4(bool(args.ffn_row4))
-            ffn_f16 = getattr(runtime, "configure_ffn_f16_storage", None)
-            if args.ffn_f16_storage and ffn_f16 is None: raise NativeError("native runtime does not support FP16 FFN storage")
-            if ffn_f16 is not None: ffn_f16(bool(args.ffn_f16_storage))
-            gqa_k_shared = getattr(runtime, "configure_gqa_k_shared", None)
-            if args.gqa_k_shared and gqa_k_shared is None: raise NativeError("native runtime does not support shared-K GQA attention")
-            if gqa_k_shared is not None: gqa_k_shared(bool(args.gqa_k_shared))
-            gqa_v_shared = getattr(runtime, "configure_gqa_v_shared", None)
-            if args.gqa_v_shared and gqa_v_shared is None: raise NativeError("native runtime does not support shared-V GQA attention")
-            if gqa_v_shared is not None: gqa_v_shared(bool(args.gqa_v_shared))
+            # CPU-U1 is the single production route. Keep the effective state in
+            # metrics, but do not expose experiment switches in the launcher.
+            args.selective_logits = bool(getattr(runtime, "selective_logits", False))
+            args.reuse_kv = True
+            args.v_blocked_attention = bool(getattr(runtime, "v_blocked_attention", False))
+            args.ffn_row4 = bool(getattr(runtime, "ffn_row4", False))
+            args.ffn_f16_storage = bool(getattr(runtime, "ffn_f16_storage", False))
+            args.gqa_k_shared = bool(getattr(runtime, "gqa_k_shared", False))
+            args.gqa_v_shared = bool(getattr(runtime, "gqa_v_shared", False))
             session = ChatSession(runtime, tokenizer, context_limit=args.context_limit,
                                   max_new_tokens=args.max_new_tokens,
                                   temperature=args.temperature, top_k=args.top_k,
-                                  top_p=args.top_p, seed=args.seed, system=args.system, reuse_kv=args.reuse_kv)
+                                  top_p=args.top_p, seed=args.seed, system=args.system, reuse_kv=True)
             print(
                 f"profile={args.profile}, temperature={args.temperature:g}, "
                 f"top_k={args.top_k}, top_p={args.top_p:g}, seed={args.seed}, "

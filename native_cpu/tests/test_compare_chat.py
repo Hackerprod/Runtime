@@ -69,21 +69,12 @@ def parser_args(**overrides):
 
 
 class ComparePolicyTests(unittest.TestCase):
-    def test_selective_logits_flag_is_opt_in(self):
-        self.assertFalse(compare.make_parser().parse_args([]).selective_logits)
-        self.assertTrue(compare.make_parser().parse_args(["--selective-logits"]).selective_logits)
-
-    def test_ffn_row4_flag_is_opt_in(self):
-        self.assertFalse(compare.make_parser().parse_args([]).ffn_row4)
-        self.assertTrue(compare.make_parser().parse_args(["--ffn-row4"]).ffn_row4)
-
-    def test_gqa_k_shared_flag_is_opt_in(self):
-        self.assertFalse(compare.make_parser().parse_args([]).gqa_k_shared)
-        self.assertTrue(compare.make_parser().parse_args(["--gqa-k-shared"]).gqa_k_shared)
-
-    def test_gqa_v_shared_flag_is_opt_in(self):
-        self.assertFalse(compare.make_parser().parse_args([]).gqa_v_shared)
-        self.assertTrue(compare.make_parser().parse_args(["--gqa-v-shared"]).gqa_v_shared)
+    def test_optimization_switches_are_not_launcher_options(self):
+        parser = compare.make_parser()
+        for flag in ("--selective-logits", "--reuse-kv", "--v-blocked-attention",
+                     "--ffn-row4", "--ffn-f16-storage", "--gqa-k-shared", "--gqa-v-shared"):
+            with self.assertRaises(SystemExit):
+                parser.parse_args([flag])
 
     def test_chat_profile_defaults(self):
         args = compare.resolve_policy(compare.make_parser().parse_args([]))

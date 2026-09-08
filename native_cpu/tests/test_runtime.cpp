@@ -906,6 +906,8 @@ void test_ffn_f16_storage_contract() {
     assert(mm_configure_ffn_f16_storage(nullptr, 1) == -1);
     assert(mm_ffn_f16_storage(nullptr) == 0);
     assert(mm_configure_ffn_f16_storage(nullptr, 2) == -1);
+    assert(mm_get_ffn_f16_storage_bytes(nullptr, nullptr) == -1);
+    assert(mm_get_ffn_f16_prepare_ns(nullptr, nullptr) == -1);
     const auto path = write_file(threading_fixture(false), ".ffn-f16");
     const std::vector<int32_t> prefix = {1, 4, 7, 2, 9, 11, 3, 8};
     const std::vector<int32_t> suffix = {5, 6, 10};
@@ -922,6 +924,9 @@ void test_ffn_f16_storage_contract() {
             assert(mm_configure_profile(candidate.value, 1) == 0);
             assert(mm_configure_ffn_f16_storage(candidate.value, 1) == 0);
             assert(mm_ffn_f16_storage(candidate.value) == 1);
+            uint64_t compact_bytes = 0, prepare_ns = 123;
+            assert(mm_get_ffn_f16_storage_bytes(candidate.value, &compact_bytes) == 0 && compact_bytes > 0);
+            assert(mm_get_ffn_f16_prepare_ns(candidate.value, &prepare_ns) == 0 && prepare_ns == 0);
             assert(mm_configure_ffn_row4(candidate.value, 1) == -3);
             assert_exact(evaluate(candidate.value, prefix), evaluate(reference.value, prefix));
             assert(mm_get_stats(candidate.value, nullptr) == -1);

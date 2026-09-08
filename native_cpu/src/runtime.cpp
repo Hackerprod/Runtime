@@ -308,6 +308,7 @@ struct Runtime {
     std::uint64_t attention_qk_ns = 0;
     std::uint64_t attention_v_ns = 0;
     std::uint64_t gqa_v_shared_fallbacks = 0;
+    std::uint64_t ffn_f16_prepare_ns = 0;
     bool profile_enabled = false;
     bool selective_logits = false;
     bool v_blocked_attention = false;
@@ -366,6 +367,25 @@ struct Runtime {
         return true;
     }
 
+    bool is_production_model() const {
+        // The consolidated route is intentionally tied to the validated MiniMind
+        // checkpoint shape. Synthetic fixtures and alternate model layouts retain
+        // the legacy opt-in surface used by compatibility tests.
+        return config.vocab == 6400 && config.hidden == 768 && config.layers == 8 &&
+               config.q_heads == 8 && config.kv_heads == 4 && config.head_dim == 96 &&
+               config.intermediate == 2432;
+    }
+
+    std::uint64_t ffn_f16_storage_bytes() const {
+        std::uint64_t values = 0;
+        for (const LayerWeights& layer : layers) {
+            if (layer.gate_proj != nullptr) values += layer.gate_proj->f16.size();
+            if (layer.up_proj != nullptr) values += layer.up_proj->f16.size();
+            if (layer.down_proj != nullptr) values += layer.down_proj->f16.size();
+        }
+        return values * sizeof(std::uint16_t);
+    }
+
     Runtime(Config c, std::unordered_map<std::string, Tensor> t, uint32_t context, int mode)
         : config(c), max_context(context), kernel_mode(static_cast<mm::KernelMode>(mode)), tensors(std::move(t)) {
         layers.resize(config.layers);
@@ -421,6 +441,19 @@ struct Runtime {
         scores.resize(score_values);
         const char* name = mm::kernel_name(kernel_mode);
         backend = name == nullptr ? "unknown" : name;
+        if (is_production_model()) {
+            selective_logits = true;
+            v_blocked_attention = true;
+            gqa_k_shared = true;
+            gqa_v_shared = true;
+            const auto started = std::chrono::steady_clock::now();
+            if (!prepare_ffn_f16_storage()) {
+                throw std::runtime_error("CPU-U1 production route requires exact FP16 FFN storage and F16C");
+            }
+            ffn_f16_prepare_ns = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - started).count());
+            ffn_f16_storage = true;
+        }
     }
 
     const Tensor& tensor(const std::string& name) const {
@@ -893,6 +926,24 @@ MM_RUNTIME_API int mm_ffn_f16_storage(void* runtime) {
 
 MM_RUNTIME_API int mm_f16c_available(void) {
     return mm::f16c_available() ? 1 : 0;
+}
+
+MM_RUNTIME_API int mm_get_ffn_f16_storage_bytes(void* runtime, uint64_t* out_bytes) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (out_bytes == nullptr) return -1;
+        *out_bytes = model->ffn_f16_storage_bytes();
+        return 0;
+    } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_get_ffn_f16_prepare_ns(void* runtime, uint64_t* out_ns) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (out_ns == nullptr) return -1;
+        *out_ns = model->ffn_f16_prepare_ns;
+        return 0;
+    } catch (...) { return -1; }
 }
 
 MM_RUNTIME_API int mm_configure_gqa_k_shared(void* runtime, int enabled) {

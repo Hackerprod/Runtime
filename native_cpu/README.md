@@ -39,27 +39,19 @@ Windows group-0 logical CPUs `0,6`, and contiguous row weights `1332:992`:
 .\compare_cpu\Native_CPP_T0.cmd --prompt "Explain a CPU cache." --metrics-json
 ```
 
-The CPU-R3 four-row FFN GEMV is available as an explicit experiment; it keeps
-the same CPU-R1/CPU-R2 algorithm settings and changes only the FP32 gate/up/down
-projections:
+CPU-R3's four-row FFN experiment is retained only as historical evidence in
+[`benchmarks/cpu-r3/RESULTS.md`](benchmarks/cpu-r3/RESULTS.md); it was rejected
+and is not part of the production runtime.
 
-```powershell
-python -m native_cpu.tools.chat --model native_cpu/artifacts/minimind-fp32.bin --tokenizer checkpoints/minimind-3-hf --selective-logits --reuse-kv --v-blocked-attention --ffn-row4 --prompt "Explain a CPU cache." --metrics-json
-```
-
-The opt-in route is not the default. The bounded CPU-R3 run is retained in
-[`benchmarks/cpu-r3/RESULTS.md`](benchmarks/cpu-r3/RESULTS.md); its exact-parity
-experiment was rejected because this laptop did not show a reproducible speed
-benefit.
-
-CPU-R4 adds another opt-in route, `--gqa-k-shared`, for this MiniMind checkpoint:
-when two query heads share one KV head, the runtime shares each key read while
-keeping independent Q·K accumulators, softmax distributions and V accumulation.
-The bounded result, including raw paired receipts and the historical conversation
-parity check, is recorded in
-[`benchmarks/cpu-r4/RESULTS.md`](benchmarks/cpu-r4/RESULTS.md). It was accepted on
-this laptop; the flag remains off by default and falls back to the original path
-for other query/KV ratios.
+CPU-R1, R2, R4, R5 and R6 are now consolidated as the single production route
+for the supported MiniMind-3 checkpoint. The runtime selects contiguous row
+sharding, blocked V accumulation, shared-K/V GQA and exact FP16-storage/FP32-
+compute FFN automatically after validating the model shape, CPU instructions and
+bit-for-bit weight reconstruction. There are no optimization switches in the
+chat launcher; an incompatibility fails clearly instead of silently selecting a
+different precision path. CPU-E1 remains an isolated kernel experiment and is
+not connected to inference. The consolidation evidence is in
+[`benchmarks/cpu-u1/RESULTS.md`](benchmarks/cpu-u1/RESULTS.md).
 
 This selection is for the Ryzen AI 5 330 laptop: logical CPU 0 is the fast
 physical-core anchor and logical CPU 6 is the compact-core participant. The
@@ -76,23 +68,17 @@ unavailable rather than zero. The Python binding rejects the published CPU-R4
 DLL with the shifted statistics layout before calling `mm_get_stats`; see
 [`benchmarks/cpu-r4.1/RESULTS.md`](benchmarks/cpu-r4.1/RESULTS.md).
 
-CPU-R5 adds the opt-in `--gqa-v-shared` route. With two query heads per KV head,
-shared-K GQA and CPU-R2's 16-dimension V blocking, it reads each V block once
-and updates two independent accumulators; softmax and arithmetic order remain
-unchanged. Other ratios or missing prerequisites use the existing path and are
-counted as fallbacks. The flag is off by default; paired evidence, diagnostics,
-raw receipts and the six-turn parity check are in
-[`benchmarks/cpu-r5/RESULTS.md`](benchmarks/cpu-r5/RESULTS.md).
-
-CPU-R6 adds the opt-in `--ffn-f16-storage` route. It validates every dense
+The historical CPU-R5 and CPU-R6 experiments remain documented for lineage. R5
+shared-V reads each V block once for the two GQA heads while preserving separate
+softmax distributions; see [`benchmarks/cpu-r5/RESULTS.md`](benchmarks/cpu-r5/RESULTS.md).
+R6 validates every dense
 `gate_proj`, `up_proj` and `down_proj` weight by an FP32→FP16→FP32 bit-for-bit
 round trip, prepares the half storage once, and converts eight weights directly
 to FP32 registers in the existing FMA GEMV order. Runtime F16C/AVX2/FMA support
 is required; a non-reconstructible tensor, quantized FFN tensor, or missing
-instruction support rejects activation and leaves the FP32 path selected. The
+instruction support rejects the production load. The
 FP32 vectors remain allocated for reference, so compact storage is reported as
-additional runtime memory rather than a total-RAM reduction. CPU-R3 row4 and
-CPU-R6 are mutually exclusive, and the new flag is off by default.
+additional runtime memory rather than a total-RAM reduction.
 
 The bounded CPU-R6 campaign accepted this route: FFN time fell by a median
 22.540%/20.860% in prefill (prefixes 256/1792) and 21.944%/18.777% in decode;
@@ -102,13 +88,6 @@ versus X1 (FP16 storage), not a cumulative claim over earlier experiments. Full
 raw receipts, reconstruction evidence and the fail-closed report are in
 [`benchmarks/cpu-r6/RESULTS.md`](benchmarks/cpu-r6/RESULTS.md).
 
-To try it manually on the same CPU-R5 base, add only the final flag (never
-combine it with `--ffn-row4`):
-
-```powershell
-python -m native_cpu.tools.chat --model native_cpu/artifacts/minimind-fp32.bin --tokenizer checkpoints/minimind-3-hf --selective-logits --reuse-kv --v-blocked-attention --gqa-k-shared --gqa-v-shared --ffn-f16-storage
-```
-
 Use `/clear` to reset the conversation and random generator, and `/exit` to quit.
 A one-shot invocation:
 
@@ -116,7 +95,7 @@ A one-shot invocation:
 python -m native_cpu.tools.chat --model native_cpu/artifacts/minimind-fp32.bin --tokenizer checkpoints/minimind-3-hf --prompt "Hello! Who are you?" --max-new-tokens 64 --metrics-json
 ```
 
-FP32 is the recommended default. The experimental `minimind-q4.bin` is smaller,
+The consolidated route keeps FP32 arithmetic (with exact FP16 FFN storage). The experimental `minimind-q4.bin` is smaller,
 but was slower than native FP32 and materially changed responses in this test.
 Neither variant improves the language abilities of the pretrained model.
 

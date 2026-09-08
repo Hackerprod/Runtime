@@ -1,0 +1,157 @@
+{
+  "identity": {
+    "schema": "cpu-e4/ngram-v1",
+    "source_commit": "9678375354408b98a35235fd6e81b016abdd38f6",
+    "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+    "tokenizer_path": "checkpoints\\minimind-3-hf",
+    "baseline_library_sha256": "3ff9418181d29ad9f7761e2a48866f06759027b4599ef1d024f24ac4cd3acfd5",
+    "candidate_library_sha256": "b410e642e2249a8982a9a83b134f3d7f5e1f37c677f11d10900ed0e213cb97ab",
+    "threads": 1,
+    "cpus": [
+      0
+    ],
+    "row_weights": [
+      1
+    ],
+    "profiler": false,
+    "max_new_tokens": 32,
+    "temperature": 0.9,
+    "top_k": 50,
+    "top_p": 0.85,
+    "seed": 0,
+    "policy": {
+      "key_tokens": 12,
+      "proposal_tokens": 4,
+      "search": "most recent earlier non-overlapping match"
+    },
+    "timed_operation": "end-to-end decode including lookup, sampling, verification and rollbacks"
+  },
+  "workload": "ordinary",
+  "summary": {
+    "pairs": 3,
+    "parity": true,
+    "profiles": {
+      "A": {
+        "prefill_seconds": {
+          "count": 3,
+          "median": 0.29947219998575747,
+          "min": 0.29644939978607,
+          "max": 0.321296599926427
+        },
+        "native_generation_seconds": {
+          "count": 3,
+          "median": 0.41213509952649474,
+          "min": 0.40325620118528605,
+          "max": 0.4233683994971216
+        },
+        "decode_seconds": {
+          "count": 3,
+          "median": 0.44435319979675114,
+          "min": 0.43539840006269515,
+          "max": 0.4571797999087721
+        },
+        "total_seconds": {
+          "count": 3,
+          "median": 0.74238619976677,
+          "min": 0.7368713999167085,
+          "max": 0.780051999958232
+        },
+        "decode_tokens_per_second": {
+          "count": 3,
+          "median": 150.4361071678493,
+          "min": 146.44456240391065,
+          "max": 153.74841060785712
+        }
+      },
+      "B": {
+        "prefill_seconds": {
+          "count": 3,
+          "median": 0.29092720011249185,
+          "min": 0.29043100005947053,
+          "max": 0.29591400013305247
+        },
+        "native_generation_seconds": {
+          "count": 3,
+          "median": 0.38632979919202626,
+          "min": 0.38363000052049756,
+          "max": 0.43544130004011095
+        },
+        "decode_seconds": {
+          "count": 3,
+          "median": 0.4182513998821378,
+          "min": 0.4165404001250863,
+          "max": 0.4679997998755425
+        },
+        "total_seconds": {
+          "count": 3,
+          "median": 0.7109018999617547,
+          "min": 0.7085418002679944,
+          "max": 0.7655015999916941
+        },
+        "decode_tokens_per_second": {
+          "count": 3,
+          "median": 160.4846432495432,
+          "min": 142.3842892125502,
+          "max": 161.61405499017354
+        }
+      }
+    },
+    "paired_differences": [
+      {
+        "pair": 1,
+        "decode_time_reduction": 0.04331205611893241,
+        "total_time_reduction": 0.03844578531873577,
+        "decode_tok_s_change": 0.05115919150785975,
+        "candidate_speculative": {
+          "proposed_blocks": 1.0,
+          "proposed_tokens": 4.0,
+          "accepted_tokens": 0.0,
+          "verify_calls": 0.0,
+          "first_position_failures": 1.0,
+          "accepted_length_total": 0.0,
+          "lookup_seconds": 0.0009613991715013981,
+          "verification_seconds": 0.0,
+          "mean_accepted_length": 0.0
+        }
+      },
+      {
+        "pair": 2,
+        "decode_time_reduction": -0.02366683735573938,
+        "total_time_reduction": 0.018653115391431663,
+        "decode_tok_s_change": -0.02772566713786051,
+        "candidate_speculative": {
+          "proposed_blocks": 1.0,
+          "proposed_tokens": 4.0,
+          "accepted_tokens": 0.0,
+          "verify_calls": 0.0,
+          "first_position_failures": 1.0,
+          "accepted_length_total": 0.0,
+          "lookup_seconds": 0.0009371992200613022,
+          "verification_seconds": 0.0,
+          "mean_accepted_length": 0.0
+        }
+      },
+      {
+        "pair": 3,
+        "decode_time_reduction": 0.05874110938449961,
+        "total_time_reduction": 0.042409597342874306,
+        "decode_tok_s_change": 0.06679603900200815,
+        "candidate_speculative": {
+          "proposed_blocks": 1.0,
+          "proposed_tokens": 4.0,
+          "accepted_tokens": 0.0,
+          "verify_calls": 0.0,
+          "first_position_failures": 1.0,
+          "accepted_length_total": 0.0,
+          "lookup_seconds": 0.0009171003475785255,
+          "verification_seconds": 0.0,
+          "mean_accepted_length": 0.0
+        }
+      }
+    ],
+    "median_decode_time_reduction": 0.04331205611893241,
+    "median_total_time_reduction": 0.03844578531873577,
+    "favorable_decode_pairs": 2
+  },
+  "status": "PASS"
+}

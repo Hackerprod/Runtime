@@ -52,8 +52,10 @@ chat launcher; an incompatibility fails clearly instead of silently selecting a
 different precision path. Complete groups of four prefill positions now use the
 validated CPU-E1 `gemv_f16_x4` kernel per FFN projection (CPU-E2); one-token
 decode and 1–3-token tails retain the ordinary path. The CPU-E2 evidence is in
-[`benchmarks/cpu-e2/RESULTS.md`](benchmarks/cpu-e2/RESULTS.md), and its DLL is
-the current reproducible baseline. The consolidation evidence remains in
+[`benchmarks/cpu-e2/RESULTS.md`](benchmarks/cpu-e2/RESULTS.md). CPU-E4 adds the
+fixed automatic n-gram proposer on top of that route; its accepted candidate is
+now the current reproducible baseline and its evidence is in
+[`benchmarks/cpu-e4/RESULTS.md`](benchmarks/cpu-e4/RESULTS.md). The consolidation evidence remains in
 [`benchmarks/cpu-u1/RESULTS.md`](benchmarks/cpu-u1/RESULTS.md).
 
 This selection is for the Ryzen AI 5 330 laptop: logical CPU 0 is the fast
@@ -62,7 +64,7 @@ FP32 kernels, weights, and math are unchanged. The caller's CPU affinity is
 scoped to each `mm_eval` and restored afterward; the background worker spins
 during an active evaluation and parks between requests. CPU-energy tradeoffs
 were not measured, and this profile is not a universal speed claim. The
-one-participant consolidated CPU-E2 route remains the default comparison
+one-participant consolidated CPU-E4 route remains the default comparison
 launcher; T0 affinity is still explicit.
 
 CPU-R4.1 restores the pre-CPU-R4 binary layout of `MmRuntimeStats` (1,136

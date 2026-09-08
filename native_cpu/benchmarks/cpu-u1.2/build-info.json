@@ -1,0 +1,42 @@
+{
+  "build_type": "Release",
+  "cmake": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+  "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /EHsc /fp:precise /std:c++20",
+  "compiler": {
+    "id": "MSVC",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+    "version": "19.50.35727.0"
+  },
+  "generator": "Visual Studio 18 2026",
+  "build_output_library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build-u1.2\\Release\\minimind_cpu.dll",
+  "library": "native_cpu/benchmarks/cpu-u1.2/baseline/minimind_cpu.dll",
+  "native_sources_sha256": {
+    "native_cpu/CMakeLists.txt": "e5b91289091c3403898f2d6ff7320f4f1f6d64e3df765b6aa0d31bbfb2638c72",
+    "native_cpu/include/mm_kernels.h": "717abea389e3ee2b83498d960df0e2759d1a9d6ddf5eebd42f0cdc5007339be0",
+    "native_cpu/include/mm_parallel.h": "d7c6a24eafb94900210e69bd27945b3cd69f590ca6fd8836f81ca284f7e7ee8f",
+    "native_cpu/include/mm_runtime.h": "d2fadcc52926bfa7c269df5d0d9ca917ea9fdfffbc8d2b565ea633530193c290",
+    "native_cpu/src/kernels.cpp": "108c684532a1b2f4cc4a50183262c21124d07f3c0db687f08704a6cf6dc09317",
+    "native_cpu/src/parallel.cpp": "4b18a9d5a943232637f6f3b43ef524438ae0698595fce69d3205de058c6c42bd",
+    "native_cpu/src/runtime.cpp": "d7154b99f185d09029a69bb993a4250c493ad666aee5181da4e0e73a83b968f5",
+    "native_cpu/tests/test_kernels.cpp": "30242a19ccf23a0660c0cfcc9c03ccb5e5d40eabd8a7a38611eee2b5343e3e54",
+    "native_cpu/tests/test_runtime.cpp": "26c3929576c7c212c95e6a3c0e9c77d54b3edd2c5f1960e3f41817b9e45a4c9f"
+  },
+  "schema_version": 1,
+  "experiment": "CPU-U1.2 reproducible single baseline",
+  "source_commit": "06694632cfe4ee5b97013d6a5b2e6fec9fe98f50",
+  "source_commit_verified": true,
+  "baseline_library_relative": "native_cpu/benchmarks/cpu-u1.2/baseline/minimind_cpu.dll",
+  "library_sha256": "5956ff064ad8e8fd1ff502d18626ce19240682faa55c584cb3d6eaad1775bb3a",
+  "native_threads": 1,
+  "cpus": [
+    0
+  ],
+  "profiler": false,
+  "runtime_route": "CPU-U1 automatic production route; no launcher switches",
+  "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+  "tokenizer_sha256": {
+    "chat_template.jinja": "97c6a9ef3f8d35044f435bb7773f1af160a7328ab6e8d2e9d67702941320a711",
+    "tokenizer_config.json": "04ae7620b9cf93fd2d6fbf94936b0c3c4be65f30cd6ef6fa8741baac986525d1",
+    "tokenizer.json": "71f32c68cf63a15355a8fc171b7594b3d41870fe0ddb54fc6aefa55f73a4a668"
+  }
+}

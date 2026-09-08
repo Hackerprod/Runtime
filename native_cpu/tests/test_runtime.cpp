@@ -276,8 +276,9 @@ void patterned_tensor(std::vector<uint8_t>& out, const std::string& name,
     for (size_t i = 0; i < rows * groups; ++i) f32(out, 1.0f / 32.0f);
 }
 
-std::vector<uint8_t> threading_fixture(bool q4) {
-    constexpr uint32_t hidden = 36, layers = 2, q = 3, kv = 1, hd = 12, inter = 41;
+std::vector<uint8_t> threading_fixture(bool q4, uint32_t q = 3, uint32_t kv = 1) {
+    constexpr uint32_t layers = 2, hd = 12, inter = 41;
+    const uint32_t hidden = q * hd;
     std::vector<std::pair<std::string, std::vector<uint32_t>>> records = {
         {"model.embed_tokens.weight", {thread_vocab, hidden}},
         {"model.norm.weight", {hidden}},
@@ -557,7 +558,7 @@ void test_diagnostic_profile_contract() {
             assert(stats.qkv_calls == 12 && stats.attention_kv_calls == 4);
             assert(stats.output_projection_calls == 4 && stats.ffn_calls == 12);
             assert(stats.vocab_head_calls == 2);
-            assert(stats.qkv_ns > 0 && stats.attention_kv_ns > 0);
+            assert(stats.qkv_ns > 0 && stats.attention_kv_ns > 0 && stats.attention_qk_ns > 0);
             assert(stats.remaining_ops_ns > 0 && stats.vocab_head_ns > 0);
             for (uint32_t i = 0; i < 64; ++i) {
                 assert(stats.participant_compute_calls[i] == (i < threads ? 30u : 0u));
@@ -577,7 +578,7 @@ void test_diagnostic_profile_contract() {
             assert_exact(evaluate(candidate.value, {1, 4}), expected);
             assert(mm_get_stats(candidate.value, &stats) == 0);
             assert(stats.lm_head_calls == 2);
-            assert(stats.qkv_ns == 0 && stats.remaining_ops_ns == 0);
+            assert(stats.qkv_ns == 0 && stats.attention_qk_ns == 0 && stats.remaining_ops_ns == 0);
             assert(stats.controller_wait_ns == 0);
             for (uint32_t i = 0; i < 64; ++i) assert(stats.participant_compute_ns[i] == 0);
             // Restore the reference prefix for the next participant count.
@@ -704,6 +705,43 @@ void test_v_blocked_attention_contract() {
     std::filesystem::remove(path);
 }
 
+void test_gqa_k_shared_contract() {
+    const auto pair_path = write_file(threading_fixture(false, 2, 1), ".gqa-pair");
+    const std::vector<int32_t> prefix = {1, 4, 7, 2, 9, 11, 3, 8, 5, 6, 10, 12};
+    const std::vector<int32_t> suffix = {13, 14, 15};
+    assert(mm_configure_gqa_k_shared(nullptr, 1) == -1);
+    assert(mm_gqa_k_shared(nullptr) == 0);
+    for (int mode : {0, 1}) for (uint32_t threads : {1u, 2u, 4u}) for (int selective : {0, 1}) {
+        ScopedRuntime reference(pair_path, mode), candidate(pair_path, mode);
+        configure(reference.value, threads);
+        configure(candidate.value, threads);
+        assert(mm_configure_selective_logits(reference.value, selective) == 0);
+        assert(mm_configure_selective_logits(candidate.value, selective) == 0);
+        assert(mm_configure_v_blocked_attention(reference.value, 1) == 0);
+        assert(mm_configure_v_blocked_attention(candidate.value, 1) == 0);
+        assert(mm_gqa_k_shared(candidate.value) == 0);
+        assert(mm_configure_gqa_k_shared(candidate.value, 1) == 0);
+        assert(mm_gqa_k_shared(candidate.value) == 1);
+        assert_exact(evaluate(candidate.value, prefix), evaluate(reference.value, prefix));
+        assert_exact(evaluate(candidate.value, suffix), evaluate(reference.value, suffix));
+        assert(mm_configure_gqa_k_shared(candidate.value, 0) == 0);
+        assert(mm_gqa_k_shared(candidate.value) == 0);
+        assert_exact(evaluate(candidate.value, {16}), evaluate(reference.value, {16}));
+    }
+    std::filesystem::remove(pair_path);
+
+    // Enabling the option must be a no-op for a non-pair GQA relationship.
+    const auto fallback_path = write_file(threading_fixture(false), ".gqa-fallback");
+    for (int mode : {0, 1}) {
+        ScopedRuntime reference(fallback_path, mode), candidate(fallback_path, mode);
+        assert(mm_configure_gqa_k_shared(candidate.value, 1) == 0);
+        assert(mm_gqa_k_shared(candidate.value) == 1);
+        assert_exact(evaluate(candidate.value, prefix), evaluate(reference.value, prefix));
+        assert_exact(evaluate(candidate.value, suffix), evaluate(reference.value, suffix));
+    }
+    std::filesystem::remove(fallback_path);
+}
+
 void test_ffn_row4_contract() {
     const auto path = write_file(threading_fixture(false), ".ffn-row4");
     const std::vector<int32_t> prefix = {1, 4, 7, 2, 9, 11, 3, 8, 5, 6, 10, 12};
@@ -809,6 +847,7 @@ int main() {
     test_diagnostic_profile_contract();
     test_selective_logits_contract();
     test_v_blocked_attention_contract();
+    test_gqa_k_shared_contract();
     test_ffn_row4_contract();
     test_truncate_contract();
     test_cache_reset_and_overflow();

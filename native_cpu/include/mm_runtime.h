@@ -33,7 +33,7 @@ typedef struct MmRuntimeStats {
     uint64_t lm_head_calls;
     uint64_t qkv_calls, attention_kv_calls, output_projection_calls;
     uint64_t ffn_calls, vocab_head_calls, remaining_ops_calls;
-    uint64_t qkv_ns, attention_kv_ns, output_projection_ns;
+    uint64_t qkv_ns, attention_kv_ns, attention_qk_ns, output_projection_ns;
     uint64_t ffn_ns, vocab_head_ns, remaining_ops_ns;
     uint64_t participant_compute_ns[64], controller_wait_ns;
     uint64_t participant_compute_calls[64];
@@ -48,6 +48,8 @@ MM_RUNTIME_API int mm_configure_v_blocked_attention(void* runtime, int enabled);
 MM_RUNTIME_API int mm_v_blocked_attention(void* runtime);
 MM_RUNTIME_API int mm_configure_ffn_row4(void* runtime, int enabled);
 MM_RUNTIME_API int mm_ffn_row4(void* runtime);
+MM_RUNTIME_API int mm_configure_gqa_k_shared(void* runtime, int enabled);
+MM_RUNTIME_API int mm_gqa_k_shared(void* runtime);
 MM_RUNTIME_API int mm_truncate(void* runtime, uint32_t position, char* error, size_t error_cap);
 MM_RUNTIME_API int mm_logits_valid(void* runtime);
 MM_RUNTIME_API uint64_t mm_cache_epoch(void* runtime);

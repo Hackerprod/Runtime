@@ -114,3 +114,23 @@ def test_effective_configuration_checks_ffn_row4():
   threads=1;cpus=[0];row_weights=[1];selective_logits=True;v_blocked_attention=True;ffn_row4=False
  cfg={"threads":1,"cpus":[0],"row_weights":[1],"selective_logits":True,"reuse_kv":True,"v_blocked_attention":True,"ffn_row4":True}
  with pytest.raises(AssertionError): benchmark.effective(Runtime(),cfg,False)
+
+def test_cpu_r4_case_matrix_is_bounded_to_requested_prefixes():
+ class A: suite="cpu-r4";subset=None;prefix_lengths=[64,256,1024,1792];diagnostic_context=256
+ cases=benchmark.make_cases(A())
+ assert [c["key"] for c in cases]==[
+  "cpu-r4-speed-K0-K1-256",
+  "cpu-r4-diagnostics-K0-K1-256",
+  "cpu-r4-speed-K0-K1-1792",
+  "cpu-r4-diagnostics-K0-K1-1792",
+ ]
+ assert all(c["left"]=="K0" and c["right"]=="K1" and c["workload"]=="forced" for c in cases)
+ assert [bool(c.get("diagnostics")) for c in cases]==[False,True,False,True]
+ assert benchmark.PROFILES["K0"]["v_blocked_attention"] and not benchmark.PROFILES["K0"]["gqa_k_shared"]
+ assert benchmark.PROFILES["K1"]["v_blocked_attention"] and benchmark.PROFILES["K1"]["gqa_k_shared"]
+
+def test_effective_configuration_checks_gqa_k_shared():
+ class Runtime:
+  threads=1;cpus=[0];row_weights=[1];selective_logits=True;v_blocked_attention=True;ffn_row4=False;gqa_k_shared=False
+ cfg={"threads":1,"cpus":[0],"row_weights":[1],"selective_logits":True,"reuse_kv":True,"v_blocked_attention":True,"ffn_row4":False,"gqa_k_shared":True}
+ with pytest.raises(AssertionError): benchmark.effective(Runtime(),cfg,False)

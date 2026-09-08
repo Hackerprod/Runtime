@@ -12,7 +12,7 @@ class _MmRuntimeStats(ctypes.Structure):
     _fields_ = [(name, ctypes.c_uint64) for name in (
         "lm_head_calls", "qkv_calls", "attention_kv_calls", "output_projection_calls",
         "ffn_calls", "vocab_head_calls", "remaining_ops_calls", "qkv_ns",
-        "attention_kv_ns", "output_projection_ns", "ffn_ns", "vocab_head_ns",
+        "attention_kv_ns", "attention_qk_ns", "output_projection_ns", "ffn_ns", "vocab_head_ns",
         "remaining_ops_ns")]
     _fields_ += [("participant_compute_ns", ctypes.c_uint64 * 64),
                  ("controller_wait_ns", ctypes.c_uint64),
@@ -86,6 +86,8 @@ class NativeRuntime:
         self._query_v_blocked_attention = getattr(lib, "mm_v_blocked_attention", None)
         self._configure_ffn_row4 = getattr(lib, "mm_configure_ffn_row4", None)
         self._query_ffn_row4 = getattr(lib, "mm_ffn_row4", None)
+        self._configure_gqa_k_shared = getattr(lib, "mm_configure_gqa_k_shared", None)
+        self._query_gqa_k_shared = getattr(lib, "mm_gqa_k_shared", None)
         self._query_logits_valid = getattr(lib, "mm_logits_valid", None)
         self._query_epoch = getattr(lib, "mm_cache_epoch", None)
         if self._configure_selective is not None:
@@ -102,6 +104,10 @@ class NativeRuntime:
             self._configure_ffn_row4.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_ffn_row4.restype = ctypes.c_int
         if self._query_ffn_row4 is not None:
             self._query_ffn_row4.argtypes = [ctypes.c_void_p]; self._query_ffn_row4.restype = ctypes.c_int
+        if self._configure_gqa_k_shared is not None:
+            self._configure_gqa_k_shared.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_gqa_k_shared.restype = ctypes.c_int
+        if self._query_gqa_k_shared is not None:
+            self._query_gqa_k_shared.argtypes = [ctypes.c_void_p]; self._query_gqa_k_shared.restype = ctypes.c_int
         if self._query_logits_valid is not None:
             self._query_logits_valid.argtypes = [ctypes.c_void_p]; self._query_logits_valid.restype = ctypes.c_int
         if self._query_epoch is not None:
@@ -251,6 +257,20 @@ class NativeRuntime:
         self._check()
         if self._query_ffn_row4 is None: return False
         return bool(self._query_ffn_row4(self._handle))
+
+    def configure_gqa_k_shared(self, enabled=True):
+        self._check()
+        if self._configure_gqa_k_shared is None:
+            if not enabled: return
+            raise NativeError("native runtime does not support GQA shared-K attention")
+        if int(self._configure_gqa_k_shared(self._handle, int(bool(enabled)))) != 0:
+            raise NativeError("mm_configure_gqa_k_shared failed")
+
+    @property
+    def gqa_k_shared(self):
+        self._check()
+        if self._query_gqa_k_shared is None: return False
+        return bool(self._query_gqa_k_shared(self._handle))
 
     def configure_profile(self, enabled=True):
         self._check()

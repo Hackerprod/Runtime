@@ -308,6 +308,7 @@ struct Runtime {
     bool selective_logits = false;
     bool v_blocked_attention = false;
     bool ffn_row4 = false;
+    bool gqa_k_shared = false;
     bool logits_valid = false;
     std::uint64_t cache_epoch = 0;
     Config config;
@@ -495,18 +496,7 @@ struct Runtime {
             std::fill(attention.begin(), attention.end(), 0.0f);
             const float inv_sqrt = 1.0f / std::sqrt(static_cast<float>(config.head_dim));
             const uint32_t total = position + 1;
-            for (uint32_t h = 0; h < config.q_heads; ++h) {
-                float max_score = -std::numeric_limits<float>::infinity();
-                for (uint32_t t = 0; t < total; ++t) {
-                    float score = 0.0f;
-                    const uint32_t kvh = h / (config.q_heads / config.kv_heads);
-                    for (uint32_t d = 0; d < config.head_dim; ++d) {
-                        score += q[static_cast<size_t>(h) * config.head_dim + d] * cache_k[cache_offset(layer, t, kvh, d)];
-                    }
-                    score *= inv_sqrt;
-                    scores[static_cast<size_t>(h) * max_context + t] = score;
-                    max_score = std::max(max_score, score);
-                }
+            const auto finish_attention_head = [&](uint32_t h, uint32_t kvh, float max_score) {
                 float denom = 0.0f;
                 for (uint32_t t = 0; t < total; ++t) {
                     const size_t index = static_cast<size_t>(h) * max_context + t;
@@ -514,7 +504,6 @@ struct Runtime {
                     denom += scores[index];
                 }
                 for (uint32_t t = 0; t < total; ++t) scores[static_cast<size_t>(h) * max_context + t] /= denom;
-                const uint32_t kvh = h / (config.q_heads / config.kv_heads);
                 float* const head_attention = attention.data() + static_cast<size_t>(h) * config.head_dim;
                 if (!v_blocked_attention) {
                     for (uint32_t d = 0; d < config.head_dim; ++d) {
@@ -539,6 +528,57 @@ struct Runtime {
                             }
                         }
                     }
+                }
+            };
+            const uint32_t q_per_kv = config.q_heads / config.kv_heads;
+            if (gqa_k_shared && q_per_kv == 2) {
+                for (uint32_t h = 0; h < config.q_heads; h += 2) {
+                    const uint32_t kvh = h / q_per_kv;
+                    float max_score0 = -std::numeric_limits<float>::infinity();
+                    float max_score1 = -std::numeric_limits<float>::infinity();
+                    const auto q0 = q.data() + static_cast<size_t>(h) * config.head_dim;
+                    const auto q1 = q.data() + static_cast<size_t>(h + 1) * config.head_dim;
+                    const auto qk_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+                    for (uint32_t t = 0; t < total; ++t) {
+                        float score0 = 0.0f;
+                        float score1 = 0.0f;
+                        const float* const key_row = cache_k.data() + cache_offset(layer, t, kvh, 0);
+                        for (uint32_t d = 0; d < config.head_dim; ++d) {
+                            const float key = key_row[d];
+                            score0 += q0[d] * key;
+                            score1 += q1[d] * key;
+                        }
+                        score0 *= inv_sqrt;
+                        score1 *= inv_sqrt;
+                        scores[static_cast<size_t>(h) * max_context + t] = score0;
+                        scores[static_cast<size_t>(h + 1) * max_context + t] = score1;
+                        max_score0 = std::max(max_score0, score0);
+                        max_score1 = std::max(max_score1, score1);
+                    }
+                    if (profile_enabled) {
+                        stats.attention_qk_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qk_started).count());
+                    }
+                    finish_attention_head(h, kvh, max_score0);
+                    finish_attention_head(h + 1, kvh, max_score1);
+                }
+            } else {
+                for (uint32_t h = 0; h < config.q_heads; ++h) {
+                    const uint32_t kvh = h / q_per_kv;
+                    float max_score = -std::numeric_limits<float>::infinity();
+                    const auto qk_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+                    for (uint32_t t = 0; t < total; ++t) {
+                        float score = 0.0f;
+                        for (uint32_t d = 0; d < config.head_dim; ++d) {
+                            score += q[static_cast<size_t>(h) * config.head_dim + d] * cache_k[cache_offset(layer, t, kvh, d)];
+                        }
+                        score *= inv_sqrt;
+                        scores[static_cast<size_t>(h) * max_context + t] = score;
+                        max_score = std::max(max_score, score);
+                    }
+                    if (profile_enabled) {
+                        stats.attention_qk_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qk_started).count());
+                    }
+                    finish_attention_head(h, kvh, max_score);
                 }
             }
             if (profile_enabled) {
@@ -723,6 +763,15 @@ MM_RUNTIME_API int mm_configure_ffn_row4(void* runtime, int enabled) {
 
 MM_RUNTIME_API int mm_ffn_row4(void* runtime) {
     try { return checked_runtime(runtime)->ffn_row4 ? 1 : 0; } catch (...) { return 0; }
+}
+
+MM_RUNTIME_API int mm_configure_gqa_k_shared(void* runtime, int enabled) {
+    if (enabled != 0 && enabled != 1) return -1;
+    try { checked_runtime(runtime)->gqa_k_shared = enabled != 0; return 0; } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_gqa_k_shared(void* runtime) {
+    try { return checked_runtime(runtime)->gqa_k_shared ? 1 : 0; } catch (...) { return 0; }
 }
 
 MM_RUNTIME_API int mm_configure_threads(void* runtime, uint32_t threads,

@@ -1,0 +1,9 @@
+Python syntax and focused tests (profile/bindings/benchmark orchestration):
+python -m py_compile native_cpu/tools/native.py native_cpu/tools/chat.py native_cpu/tools/compare_chat.py native_cpu/benchmarks/cpu-r1/benchmark.py native_cpu/benchmarks/cpu-r4/summarize.py native_cpu/benchmarks/cpu-r4/chat_parity.py
+PASS
+python -m pytest native_cpu/benchmarks/cpu-r1/test_benchmark.py native_cpu/tests/test_native_stats.py native_cpu/tests/test_compare_chat.py -q -k 'not resume_pair'
+38 passed, 2 deselected (pytest cache warnings only because the sandbox denies its default cache directory)
+Direct rerun of the two previously excluded temp_path assertions with a writable workspace path:
+2 direct pytest assertions passed
+Report fail-closed stale-acceptance replacement test:
+report fail-closed stale-acceptance test passed

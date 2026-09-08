@@ -52,6 +52,15 @@ The opt-in route is not the default. The bounded CPU-R3 run is retained in
 experiment was rejected because this laptop did not show a reproducible speed
 benefit.
 
+CPU-R4 adds another opt-in route, `--gqa-k-shared`, for this MiniMind checkpoint:
+when two query heads share one KV head, the runtime shares each key read while
+keeping independent Q·K accumulators, softmax distributions and V accumulation.
+The bounded result, including raw paired receipts and the historical conversation
+parity check, is recorded in
+[`benchmarks/cpu-r4/RESULTS.md`](benchmarks/cpu-r4/RESULTS.md). It was accepted on
+this laptop; the flag remains off by default and falls back to the original path
+for other query/KV ratios.
+
 This selection is for the Ryzen AI 5 330 laptop: logical CPU 0 is the fast
 physical-core anchor and logical CPU 6 is the compact-core participant. The
 FP32 kernels, weights, and math are unchanged. The caller's CPU affinity is

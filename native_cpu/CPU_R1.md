@@ -18,6 +18,16 @@ The pre-change identity is recorded in
 [`benchmarks/cpu-r1/baseline-identity.json`](benchmarks/cpu-r1/baseline-identity.json).
 The historical `t0-affinity-v1` results are not overwritten.
 
+## CPU-R4 shared-K GQA Q·K
+
+CPU-R4 keeps the CPU-R1 selective-logits and CPU-R2 KV-reuse/V-blocked settings,
+then optionally shares K reads between the two query heads mapped to one KV head.
+Each head retains its own score accumulator, softmax and V result; models with a
+different query/KV ratio use the unchanged route. Enable it with
+`--gqa-k-shared` on the native frontend. It is off by default. The bounded paired
+experiment and raw evidence are in
+[`benchmarks/cpu-r4/RESULTS.md`](benchmarks/cpu-r4/RESULTS.md).
+
 ## Metrics contract
 
 Model reset changes KV state; `begin_turn()` resets statistics. Prefill and

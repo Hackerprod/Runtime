@@ -1,0 +1,4 @@
++ CMake configure: Visual Studio 18 2026, x64, Release, BUILD_TESTING=ON
++ MSBuild Release: minimind_cpu.dll, mm_test_kernels.exe, mm_test_runtime.exe
++ CTest: 2/2 tests passed (mm_kernels, mm_runtime)
++ Direct runtime contract: mm_test_runtime.exe -> mm runtime tests passed

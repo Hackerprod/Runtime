@@ -1,0 +1,43 @@
+{
+  "case": {
+    "key": "cpu-e2-prefill-x4-256",
+    "length": 256
+  },
+  "pairs": 3,
+  "parity": true,
+  "profiles": {
+    "A": {
+      "prefill_seconds": 1.9183164001442492,
+      "native_generation_seconds": 0.2923417000565678,
+      "total_seconds": 2.2128072001505643,
+      "prefill_tokens_per_second": 133.45035260124445,
+      "decode_tokens_per_second": 109.46094927206087
+    },
+    "B": {
+      "prefill_seconds": 1.0426050999667495,
+      "native_generation_seconds": 0.30659410008229315,
+      "total_seconds": 1.3542044998612255,
+      "prefill_tokens_per_second": 245.53879508949674,
+      "decode_tokens_per_second": 104.37252377462859
+    }
+  },
+  "paired": [
+    {
+      "pair": 1,
+      "prefill_seconds_reduction": 0.47149662072046195,
+      "decode_seconds_reduction": 0.05457600277285923
+    },
+    {
+      "pair": 2,
+      "prefill_seconds_reduction": 0.4501578901528419,
+      "decode_seconds_reduction": -0.04383295226883832
+    },
+    {
+      "pair": 3,
+      "prefill_seconds_reduction": 0.45907583148907427,
+      "decode_seconds_reduction": -0.0957247403584256
+    }
+  ],
+  "favorable_prefill_pairs": 3,
+  "favorable_decode_pairs": 1
+}

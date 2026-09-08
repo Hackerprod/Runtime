@@ -1,0 +1,113 @@
+{
+  "identity": {
+    "schema": "cpu-e2/prefill-x4-v1",
+    "source_commit": "085f16ff47b552e239bc4ffb735c796eb89106d1",
+    "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+    "reference_library_sha256": "5956ff064ad8e8fd1ff502d18626ce19240682faa55c584cb3d6eaad1775bb3a",
+    "candidate_library_sha256": "3ff9418181d29ad9f7761e2a48866f06759027b4599ef1d024f24ac4cd3acfd5",
+    "threads": 1,
+    "cpus": [
+      0
+    ],
+    "row_weights": [
+      1
+    ],
+    "profiler": false,
+    "prefix_lengths": [
+      256,
+      1792
+    ],
+    "continuation": 32,
+    "pairs": 3,
+    "route": "automatic prefill groups of four; decode remains step()"
+  },
+  "cases": [
+    {
+      "case": {
+        "key": "cpu-e2-prefill-x4-256",
+        "length": 256
+      },
+      "pairs": 3,
+      "parity": true,
+      "profiles": {
+        "A": {
+          "prefill_seconds": 1.9183164001442492,
+          "native_generation_seconds": 0.2923417000565678,
+          "total_seconds": 2.2128072001505643,
+          "prefill_tokens_per_second": 133.45035260124445,
+          "decode_tokens_per_second": 109.46094927206087
+        },
+        "B": {
+          "prefill_seconds": 1.0426050999667495,
+          "native_generation_seconds": 0.30659410008229315,
+          "total_seconds": 1.3542044998612255,
+          "prefill_tokens_per_second": 245.53879508949674,
+          "decode_tokens_per_second": 104.37252377462859
+        }
+      },
+      "paired": [
+        {
+          "pair": 1,
+          "prefill_seconds_reduction": 0.47149662072046195,
+          "decode_seconds_reduction": 0.05457600277285923
+        },
+        {
+          "pair": 2,
+          "prefill_seconds_reduction": 0.4501578901528419,
+          "decode_seconds_reduction": -0.04383295226883832
+        },
+        {
+          "pair": 3,
+          "prefill_seconds_reduction": 0.45907583148907427,
+          "decode_seconds_reduction": -0.0957247403584256
+        }
+      ],
+      "favorable_prefill_pairs": 3,
+      "favorable_decode_pairs": 1
+    },
+    {
+      "case": {
+        "key": "cpu-e2-prefill-x4-1792",
+        "length": 1792
+      },
+      "pairs": 3,
+      "parity": true,
+      "profiles": {
+        "A": {
+          "prefill_seconds": 23.62883049994707,
+          "native_generation_seconds": 0.6663014004006982,
+          "total_seconds": 24.29513190034777,
+          "prefill_tokens_per_second": 75.83955541109046,
+          "decode_tokens_per_second": 48.02631358834897
+        },
+        "B": {
+          "prefill_seconds": 16.362637400161475,
+          "native_generation_seconds": 0.6779797007329762,
+          "total_seconds": 17.066030200803652,
+          "prefill_tokens_per_second": 109.51779692815998,
+          "decode_tokens_per_second": 47.19905325396058
+        }
+      },
+      "paired": [
+        {
+          "pair": 1,
+          "prefill_seconds_reduction": 0.287668126441157,
+          "decode_seconds_reduction": -0.007871362023947004
+        },
+        {
+          "pair": 2,
+          "prefill_seconds_reduction": 0.3067329167088313,
+          "decode_seconds_reduction": -0.018540243772063425
+        },
+        {
+          "pair": 3,
+          "prefill_seconds_reduction": 0.3230716168424037,
+          "decode_seconds_reduction": -0.018523001760002655
+        }
+      ],
+      "favorable_prefill_pairs": 3,
+      "favorable_decode_pairs": 0
+    }
+  ],
+  "status": "PASS"
+}

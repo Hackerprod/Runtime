@@ -49,8 +49,11 @@ sharding, blocked V accumulation, shared-K/V GQA and exact FP16-storage/FP32-
 compute FFN automatically after validating the model shape, CPU instructions and
 bit-for-bit weight reconstruction. There are no optimization switches in the
 chat launcher; an incompatibility fails clearly instead of silently selecting a
-different precision path. CPU-E1 remains an isolated kernel experiment and is
-not connected to inference. The consolidation evidence is in
+different precision path. Complete groups of four prefill positions now use the
+validated CPU-E1 `gemv_f16_x4` kernel per FFN projection (CPU-E2); one-token
+decode and 1–3-token tails retain the ordinary path. The CPU-E2 evidence is in
+[`benchmarks/cpu-e2/RESULTS.md`](benchmarks/cpu-e2/RESULTS.md), and its DLL is
+the current reproducible baseline. The consolidation evidence remains in
 [`benchmarks/cpu-u1/RESULTS.md`](benchmarks/cpu-u1/RESULTS.md).
 
 This selection is for the Ryzen AI 5 330 laptop: logical CPU 0 is the fast
@@ -59,7 +62,7 @@ FP32 kernels, weights, and math are unchanged. The caller's CPU affinity is
 scoped to each `mm_eval` and restored afterward; the background worker spins
 during an active evaluation and parks between requests. CPU-energy tradeoffs
 were not measured, and this profile is not a universal speed claim. The
-one-participant consolidated CPU-U1 route remains the default comparison
+one-participant consolidated CPU-E2 route remains the default comparison
 launcher; T0 affinity is still explicit.
 
 CPU-R4.1 restores the pre-CPU-R4 binary layout of `MmRuntimeStats` (1,136
@@ -203,8 +206,9 @@ routing and weights are not part of this runtime.
 The frontend defaults to 2048 context tokens and rejects an oversized current
 turn. The original model limit is 32768; loader allocations also have a 1 GiB
 combined cache/table/scratch cap. Runtime handles are single-session objects:
-do not call one handle concurrently. Prefill currently uses sequential GEMV,
-not batched GEMM, so long-prompt performance needs separate optimization.
+do not call one handle concurrently. Prefill remains causal and layer-ordered;
+complete four-token groups share FP16 weight conversion in the FFN, while
+attention and short tails use the existing sequential path.
 
 ## T0-style affinity and row sharding
 
@@ -245,7 +249,7 @@ four old Python test processes consumed the CPU concurrently. Full evidence:
 ## Roadmap after the faithful baseline
 
 1. Preserve pinned-weight numerical parity as the regression gate.
-2. Profile and optimize batched prefill, then decode kernels and thread scheduling;
+2. Profile and optimize the remaining prefill and decode kernels and thread scheduling;
    retain changes only after real hardware benchmarks and parity checks.
 3. Evaluate quantization against a broader conversation corpus before changing the
    default from FP32. Small prompt samples do not establish language quality.

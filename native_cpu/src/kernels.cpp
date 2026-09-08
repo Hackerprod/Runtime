@@ -14,12 +14,15 @@ namespace {
 
 #if defined(_MSC_VER)
 #define MM_TARGET_AVX2
+#define MM_TARGET_F16C
 #define MM_NOINLINE __declspec(noinline)
 #elif defined(__GNUC__) || defined(__clang__)
 #define MM_TARGET_AVX2 __attribute__((target("avx2,fma")))
+#define MM_TARGET_F16C __attribute__((target("avx2,fma,f16c")))
 #define MM_NOINLINE __attribute__((noinline))
 #else
 #define MM_TARGET_AVX2
+#define MM_TARGET_F16C
 #define MM_NOINLINE
 #endif
 
@@ -46,6 +49,91 @@ bool detect_avx2_fma() noexcept {
 #else
   return false;
 #endif
+}
+
+bool detect_f16c() noexcept {
+#if defined(_MSC_VER)
+  int regs[4]{};
+  __cpuidex(regs, 0, 0);
+  const int max_leaf = regs[0];
+  if (max_leaf < 1) return false;
+  __cpuidex(regs, 1, 0);
+  constexpr int osxsave = 1 << 27;
+  constexpr int avx = 1 << 28;
+  constexpr int f16c = 1 << 29;
+  if ((regs[2] & (osxsave | avx | f16c)) != (osxsave | avx | f16c)) return false;
+  return (_xgetbv(0) & 0x6u) == 0x6u;
+#elif defined(__GNUC__) || defined(__clang__)
+  return __builtin_cpu_supports("f16c") && __builtin_cpu_supports("avx");
+#else
+  return false;
+#endif
+}
+
+std::uint32_t float_bits(float value) noexcept {
+  std::uint32_t bits = 0;
+  std::memcpy(&bits, &value, sizeof(bits));
+  return bits;
+}
+
+float bits_float(std::uint32_t bits) noexcept {
+  float value = 0.0f;
+  std::memcpy(&value, &bits, sizeof(value));
+  return value;
+}
+
+std::uint16_t f32_to_f16_impl(float value) noexcept {
+  const std::uint32_t bits = float_bits(value);
+  const std::uint32_t sign = (bits >> 16) & 0x8000u;
+  const std::uint32_t exponent = (bits >> 23) & 0xffu;
+  std::uint32_t mantissa = bits & 0x7fffffu;
+  if (exponent == 0xffu) {
+    if (mantissa == 0) return static_cast<std::uint16_t>(sign | 0x7c00u);
+    mantissa >>= 13;
+    return static_cast<std::uint16_t>(sign | 0x7c00u | mantissa | (mantissa == 0));
+  }
+  const int unbiased = static_cast<int>(exponent) - 127;
+  int half_exponent = unbiased + 15;
+  if (half_exponent <= 0) {
+    if (half_exponent < -10) return static_cast<std::uint16_t>(sign);
+    mantissa |= 0x800000u;
+    const int shift = 14 - half_exponent;
+    std::uint32_t result = mantissa >> shift;
+    const std::uint32_t remainder = mantissa & ((1u << shift) - 1u);
+    const std::uint32_t halfway = 1u << (shift - 1);
+    if (remainder > halfway || (remainder == halfway && (result & 1u))) ++result;
+    return static_cast<std::uint16_t>(sign | result);
+  }
+  if (half_exponent >= 31) return static_cast<std::uint16_t>(sign | 0x7c00u);
+  std::uint32_t result = mantissa >> 13;
+  const std::uint32_t remainder = mantissa & 0x1fffu;
+  if (remainder > 0x1000u || (remainder == 0x1000u && (result & 1u))) {
+    ++result;
+    if (result == 0x400u) {
+      result = 0;
+      ++half_exponent;
+      if (half_exponent >= 31) return static_cast<std::uint16_t>(sign | 0x7c00u);
+    }
+  }
+  return static_cast<std::uint16_t>(sign | (static_cast<std::uint32_t>(half_exponent) << 10) | result);
+}
+
+float f16_to_f32_impl(std::uint16_t value) noexcept {
+  const std::uint32_t sign = static_cast<std::uint32_t>(value & 0x8000u) << 16;
+  int exponent = static_cast<int>((value >> 10) & 0x1fu);
+  std::uint32_t mantissa = value & 0x3ffu;
+  if (exponent == 0) {
+    if (mantissa == 0) return bits_float(sign);
+    exponent = 1;
+    while ((mantissa & 0x400u) == 0) {
+      mantissa <<= 1;
+      --exponent;
+    }
+    mantissa &= 0x3ffu;
+    return bits_float(sign | (static_cast<std::uint32_t>(exponent + 127 - 15) << 23) | (mantissa << 13));
+  }
+  if (exponent == 31) return bits_float(sign | 0x7f800000u | (mantissa << 13));
+  return bits_float(sign | (static_cast<std::uint32_t>(exponent + 127 - 15) << 23) | (mantissa << 13));
 }
 
 inline bool use_avx2(KernelMode mode) noexcept {
@@ -160,6 +248,24 @@ MM_TARGET_AVX2 MM_NOINLINE void gemv_f32_row4_avx2(
   }
 }
 
+MM_TARGET_F16C MM_NOINLINE void gemv_f16_avx2(
+    const std::uint16_t* weights, const float* x, float* y,
+    std::size_t rows, std::size_t cols) noexcept {
+  for (std::size_t row = 0; row < rows; ++row) {
+    const std::uint16_t* w = weights + row * cols;
+    __m256 acc = _mm256_setzero_ps();
+    std::size_t col = 0;
+    for (; col + 8u <= cols; col += 8u) {
+      const __m128i packed = _mm_loadu_si128(reinterpret_cast<const __m128i*>(w + col));
+      const __m256 converted = _mm256_cvtph_ps(packed);
+      acc = _mm256_fmadd_ps(converted, _mm256_loadu_ps(x + col), acc);
+    }
+    float sum = horizontal_sum(acc);
+    for (; col < cols; ++col) sum += f16_to_f32_impl(w[col]) * x[col];
+    y[row] = sum;
+  }
+}
+
 MM_TARGET_AVX2 MM_NOINLINE void gemv_q4_avx2(
     const std::uint8_t* packed, const float* scales, const float* x,
     float* y, std::size_t rows, std::size_t cols) noexcept {
@@ -208,6 +314,15 @@ bool avx2_fma_available() noexcept {
   return available;
 }
 
+bool f16c_available() noexcept {
+  static const bool available = detect_f16c() && avx2_fma_available();
+  return available;
+}
+
+std::uint16_t f32_to_f16(float value) noexcept { return f32_to_f16_impl(value); }
+
+float f16_to_f32(std::uint16_t value) noexcept { return f16_to_f32_impl(value); }
+
 const char* kernel_name(KernelMode mode) noexcept {
   if (mode == KernelMode::Auto) return avx2_fma_available() ? "avx2" : "scalar";
   return "scalar";
@@ -237,6 +352,20 @@ void gemv_f32_row4(const float* weights, const float* x, float* y,
     gemv_f32_row4_avx2(weights, x, y, rows, cols);
   } else {
     gemv_f32_scalar(weights, x, y, rows, cols);
+  }
+}
+
+void gemv_f16(const std::uint16_t* weights, const float* x, float* y,
+              std::size_t rows, std::size_t cols, KernelMode mode) noexcept {
+  if (weights == nullptr || x == nullptr || y == nullptr || rows == 0 || cols == 0) return;
+  if (mode == KernelMode::Auto && f16c_available()) {
+    gemv_f16_avx2(weights, x, y, rows, cols);
+    return;
+  }
+  for (std::size_t row = 0; row < rows; ++row) {
+    float sum = 0.0f;
+    for (std::size_t col = 0; col < cols; ++col) sum += f16_to_f32_impl(weights[row * cols + col]) * x[col];
+    y[row] = sum;
   }
 }
 

@@ -132,6 +132,18 @@ void replace_name(std::vector<uint8_t>& bytes, const std::string& from, const st
     std::copy(to.begin(), to.end(), it);
 }
 
+void patch_f32_after_name(std::vector<uint8_t>& bytes, const std::string& name, float value) {
+    const auto it = std::search(bytes.begin(), bytes.end(), name.begin(), name.end());
+    assert(it != bytes.end());
+    // The descriptor after a rank-2 name is dtype/rank/dims/group/bytes/scales.
+    const size_t offset = static_cast<size_t>(it - bytes.begin()) + name.size() + 36;
+    assert(offset + sizeof(float) <= bytes.size() - 4);
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    patch_u32(bytes, offset, bits);
+    patch_crc(bytes);
+}
+
 std::filesystem::path write_file(const std::vector<uint8_t>& bytes, const char* suffix) {
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     const auto path = std::filesystem::temp_directory_path() /
@@ -890,6 +902,57 @@ void test_ffn_row4_contract() {
     std::filesystem::remove(path);
 }
 
+void test_ffn_f16_storage_contract() {
+    assert(mm_configure_ffn_f16_storage(nullptr, 1) == -1);
+    assert(mm_ffn_f16_storage(nullptr) == 0);
+    assert(mm_configure_ffn_f16_storage(nullptr, 2) == -1);
+    const auto path = write_file(threading_fixture(false), ".ffn-f16");
+    const std::vector<int32_t> prefix = {1, 4, 7, 2, 9, 11, 3, 8};
+    const std::vector<int32_t> suffix = {5, 6, 10};
+    if (mm_f16c_available() != 0) {
+        for (int mode : {0, 1}) {
+            ScopedRuntime reference(path, mode), candidate(path, mode);
+            assert(mm_ffn_f16_storage(candidate.value) == 0);
+            assert(mm_configure_v_blocked_attention(reference.value, 1) == 0);
+            assert(mm_configure_v_blocked_attention(candidate.value, 1) == 0);
+            assert(mm_configure_gqa_k_shared(reference.value, 1) == 0);
+            assert(mm_configure_gqa_k_shared(candidate.value, 1) == 0);
+            assert(mm_configure_gqa_v_shared(reference.value, 1) == 0);
+            assert(mm_configure_gqa_v_shared(candidate.value, 1) == 0);
+            assert(mm_configure_profile(candidate.value, 1) == 0);
+            assert(mm_configure_ffn_f16_storage(candidate.value, 1) == 0);
+            assert(mm_ffn_f16_storage(candidate.value) == 1);
+            assert(mm_configure_ffn_row4(candidate.value, 1) == -3);
+            assert_exact(evaluate(candidate.value, prefix), evaluate(reference.value, prefix));
+            assert(mm_get_stats(candidate.value, nullptr) == -1);
+            assert_exact(evaluate(candidate.value, suffix), evaluate(reference.value, suffix));
+            assert(mm_configure_ffn_f16_storage(candidate.value, 0) == 0);
+            assert(mm_ffn_f16_storage(candidate.value) == 0);
+            assert(mm_configure_ffn_row4(candidate.value, 1) == 0);
+            assert(mm_configure_ffn_row4(candidate.value, 0) == 0);
+        }
+    }
+    std::filesystem::remove(path);
+
+    auto nonrepresentable = threading_fixture(false);
+    patch_f32_after_name(nonrepresentable, "model.layers.0.mlp.gate_proj.weight", 0.1f);
+    const auto nonrepresentable_path = write_file(nonrepresentable, ".ffn-f16-reject");
+    {
+        ScopedRuntime candidate(nonrepresentable_path, 0);
+        assert(mm_configure_ffn_f16_storage(candidate.value, 1) == -2);
+        assert(mm_ffn_f16_storage(candidate.value) == 0);
+    }
+    std::filesystem::remove(nonrepresentable_path);
+
+    const auto q4_path = write_file(threading_fixture(true), ".ffn-f16-q4");
+    {
+        ScopedRuntime candidate(q4_path, 0);
+        assert(mm_configure_ffn_f16_storage(candidate.value, 1) == -2);
+        assert(mm_ffn_f16_storage(candidate.value) == 0);
+    }
+    std::filesystem::remove(q4_path);
+}
+
 void test_truncate_contract() {
     const auto path = write_file(threading_fixture(false), ".truncate");
     const std::vector<int32_t> prefix = {1, 4, 7, 2, 9, 3, 5, 6};
@@ -973,6 +1036,7 @@ int main() {
     test_gqa_k_shared_contract();
     test_gqa_v_shared_contract();
     test_ffn_row4_contract();
+    test_ffn_f16_storage_contract();
     test_truncate_contract();
     test_cache_reset_and_overflow();
     test_crc_and_truncation();

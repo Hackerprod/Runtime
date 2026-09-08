@@ -351,6 +351,7 @@ def _response_json(r, args):
         "reuse_kv": bool(getattr(args, "reuse_kv", False)),
         "v_blocked_attention": bool(getattr(args, "v_blocked_attention", False)),
         "ffn_row4": bool(getattr(args, "ffn_row4", False)),
+        "ffn_f16_storage": bool(getattr(args, "ffn_f16_storage", False)),
         "gqa_k_shared": bool(getattr(args, "gqa_k_shared", False)),
         "gqa_v_shared": bool(getattr(args, "gqa_v_shared", False)),
     }
@@ -392,9 +393,11 @@ def main(argv=None):
     p.add_argument("--reuse-kv", action="store_true", help="reuse verified KV prefixes between turns")
     p.add_argument("--v-blocked-attention", action="store_true", help="use experimental contiguous-dimension V accumulation (off by default)")
     p.add_argument("--ffn-row4", action="store_true", help="use experimental four-row FP32 FFN GEMV (off by default)")
+    p.add_argument("--ffn-f16-storage", action="store_true", help="use exact FP16-storage/FP32-compute FFN GEMV (off by default)")
     p.add_argument("--gqa-k-shared", action="store_true", help="share K reads across the two GQA query heads (off by default)")
     p.add_argument("--gqa-v-shared", action="store_true", help="share V reads across the two GQA query heads (off by default)")
     args = _resolve_profile(p.parse_args(argv))
+    if args.ffn_row4 and args.ffn_f16_storage: p.error("--ffn-row4 and --ffn-f16-storage are mutually exclusive")
     if args.max_new_tokens < 0: p.error("--max-new-tokens must be non-negative")
     if args.context_limit < 2: p.error("--context-limit must be at least 2")
     if not np.isfinite(args.temperature) or args.temperature < 0 or args.top_k < 0 or not np.isfinite(args.top_p) or not 0 < args.top_p <= 1: p.error("sampling parameters must be finite and valid")
@@ -414,6 +417,9 @@ def main(argv=None):
             ffn_row4 = getattr(runtime, "configure_ffn_row4", None)
             if args.ffn_row4 and ffn_row4 is None: raise NativeError("native runtime does not support FFN row4")
             if ffn_row4 is not None: ffn_row4(bool(args.ffn_row4))
+            ffn_f16 = getattr(runtime, "configure_ffn_f16_storage", None)
+            if args.ffn_f16_storage and ffn_f16 is None: raise NativeError("native runtime does not support FP16 FFN storage")
+            if ffn_f16 is not None: ffn_f16(bool(args.ffn_f16_storage))
             gqa_k_shared = getattr(runtime, "configure_gqa_k_shared", None)
             if args.gqa_k_shared and gqa_k_shared is None: raise NativeError("native runtime does not support shared-K GQA attention")
             if gqa_k_shared is not None: gqa_k_shared(bool(args.gqa_k_shared))

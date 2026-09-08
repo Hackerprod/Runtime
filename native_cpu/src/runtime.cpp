@@ -37,6 +37,7 @@ struct Tensor {
     uint32_t dtype = 0;
     std::vector<uint32_t> shape;
     std::vector<float> f32;
+    mutable std::vector<std::uint16_t> f16;
     std::vector<uint8_t> q4;
     std::vector<float> scales;
 
@@ -311,6 +312,7 @@ struct Runtime {
     bool selective_logits = false;
     bool v_blocked_attention = false;
     bool ffn_row4 = false;
+    bool ffn_f16_storage = false;
     bool gqa_k_shared = false;
     bool gqa_v_shared = false;
     bool logits_valid = false;
@@ -330,6 +332,39 @@ struct Runtime {
     std::vector<float> q, k, v, q_rot, k_rot, attention;
     std::vector<float> intermediate, ffn_up, logits, scores;
     std::vector<float> rope_cos, rope_sin;
+
+    bool prepare_ffn_f16_storage() {
+        if (!mm::f16c_available()) return false;
+        std::vector<const Tensor*> compact;
+        compact.reserve(static_cast<size_t>(config.layers) * 3);
+        for (const LayerWeights& layer : layers) {
+            compact.push_back(layer.gate_proj);
+            compact.push_back(layer.up_proj);
+            compact.push_back(layer.down_proj);
+        }
+        for (const Tensor* weight : compact) {
+            if (weight == nullptr || weight->dtype != 0) {
+                for (const Tensor* item : compact) if (item != nullptr) item->f16.clear();
+                return false;
+            }
+            std::vector<std::uint16_t> candidate(weight->f32.size());
+            for (size_t index = 0; index < weight->f32.size(); ++index) {
+                const float value = weight->f32[index];
+                const std::uint16_t half = mm::f32_to_f16(value);
+                const float restored = mm::f16_to_f32(half);
+                std::uint32_t value_bits = 0, restored_bits = 0;
+                std::memcpy(&value_bits, &value, sizeof(value_bits));
+                std::memcpy(&restored_bits, &restored, sizeof(restored_bits));
+                if (value_bits != restored_bits) {
+                    for (const Tensor* item : compact) if (item != nullptr) item->f16.clear();
+                    return false;
+                }
+                candidate[index] = half;
+            }
+            weight->f16 = std::move(candidate);
+        }
+        return true;
+    }
 
     Runtime(Config c, std::unordered_map<std::string, Tensor> t, uint32_t context, int mode)
         : config(c), max_context(context), kernel_mode(static_cast<mm::KernelMode>(mode)), tensors(std::move(t)) {
@@ -414,11 +449,13 @@ struct Runtime {
     }
 
     void gemv(const Tensor& weight, const float* input, float* output,
-              ProfileOp op = ProfileOp::Remaining, bool use_ffn_row4 = false) {
+              ProfileOp op = ProfileOp::Remaining, bool use_ffn_row4 = false,
+              bool use_ffn_f16 = false) {
         const uint32_t rows = static_cast<uint32_t>(weight.rows());
         const uint32_t cols = static_cast<uint32_t>(weight.cols());
         const auto started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-        if (weight.dtype == 0 && use_ffn_row4 && ffn_row4) parallel.gemv_f32_row4(weight.f32.data(), input, output, rows, cols, kernel_mode);
+        if (weight.dtype == 0 && use_ffn_f16 && ffn_f16_storage && weight.f16.size() == weight.f32.size()) parallel.gemv_f16(weight.f16.data(), input, output, rows, cols, kernel_mode);
+        else if (weight.dtype == 0 && use_ffn_row4 && ffn_row4) parallel.gemv_f32_row4(weight.f32.data(), input, output, rows, cols, kernel_mode);
         else if (weight.dtype == 0) parallel.gemv_f32(weight.f32.data(), input, output, rows, cols, kernel_mode);
         else parallel.gemv_q4(weight.q4.data(), weight.scales.data(), input, output, rows, cols, kernel_mode);
         if (profile_enabled) {
@@ -638,13 +675,13 @@ struct Runtime {
             gemv(*w.o_proj, attention.data(), projection.data(), ProfileOp::Output);
             for (uint32_t d = 0; d < config.hidden; ++d) hidden[d] = residual[d] + projection[d];
             rms_norm(hidden, *w.post_attention_norm, config.rms_eps, normed);
-            gemv(*w.gate_proj, normed.data(), intermediate.data(), ProfileOp::Ffn, true);
-            gemv(*w.up_proj, normed.data(), ffn_up.data(), ProfileOp::Ffn, true);
+            gemv(*w.gate_proj, normed.data(), intermediate.data(), ProfileOp::Ffn, true, true);
+            gemv(*w.up_proj, normed.data(), ffn_up.data(), ProfileOp::Ffn, true, true);
             for (uint32_t d = 0; d < config.intermediate; ++d) {
                 const float gate = intermediate[d];
                 intermediate[d] = (gate / (1.0f + std::exp(-gate))) * ffn_up[d];
             }
-            gemv(*w.down_proj, intermediate.data(), projection.data(), ProfileOp::Ffn, true);
+            gemv(*w.down_proj, intermediate.data(), projection.data(), ProfileOp::Ffn, true, true);
             for (uint32_t d = 0; d < config.hidden; ++d) hidden[d] += projection[d];
         }
         rms_norm(hidden, tensor("model.norm.weight"), config.rms_eps, normed);
@@ -820,11 +857,42 @@ MM_RUNTIME_API int mm_get_attention_qk_ns(void* runtime, uint64_t* out_ns) {
 
 MM_RUNTIME_API int mm_configure_ffn_row4(void* runtime, int enabled) {
     if (enabled != 0 && enabled != 1) return -1;
-    try { checked_runtime(runtime)->ffn_row4 = enabled != 0; return 0; } catch (...) { return -1; }
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (enabled != 0 && model->ffn_f16_storage) return -3;
+        model->ffn_row4 = enabled != 0;
+        return 0;
+    } catch (...) { return -1; }
 }
 
 MM_RUNTIME_API int mm_ffn_row4(void* runtime) {
     try { return checked_runtime(runtime)->ffn_row4 ? 1 : 0; } catch (...) { return 0; }
+}
+
+MM_RUNTIME_API int mm_configure_ffn_f16_storage(void* runtime, int enabled) {
+    if (enabled != 0 && enabled != 1) return -1;
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (enabled == 0) {
+            model->ffn_f16_storage = false;
+            return 0;
+        }
+        if (model->ffn_row4) return -3;
+        if (!model->prepare_ffn_f16_storage()) {
+            model->ffn_f16_storage = false;
+            return -2;
+        }
+        model->ffn_f16_storage = true;
+        return 0;
+    } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_ffn_f16_storage(void* runtime) {
+    try { return checked_runtime(runtime)->ffn_f16_storage ? 1 : 0; } catch (...) { return 0; }
+}
+
+MM_RUNTIME_API int mm_f16c_available(void) {
+    return mm::f16c_available() ? 1 : 0;
 }
 
 MM_RUNTIME_API int mm_configure_gqa_k_shared(void* runtime, int enabled) {

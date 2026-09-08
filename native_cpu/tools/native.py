@@ -86,6 +86,9 @@ class NativeRuntime:
         self._query_v_blocked_attention = getattr(lib, "mm_v_blocked_attention", None)
         self._configure_ffn_row4 = getattr(lib, "mm_configure_ffn_row4", None)
         self._query_ffn_row4 = getattr(lib, "mm_ffn_row4", None)
+        self._configure_ffn_f16_storage = getattr(lib, "mm_configure_ffn_f16_storage", None)
+        self._query_ffn_f16_storage = getattr(lib, "mm_ffn_f16_storage", None)
+        self._query_f16c_available = getattr(lib, "mm_f16c_available", None)
         self._configure_gqa_k_shared = getattr(lib, "mm_configure_gqa_k_shared", None)
         self._query_gqa_k_shared = getattr(lib, "mm_gqa_k_shared", None)
         self._configure_gqa_v_shared = getattr(lib, "mm_configure_gqa_v_shared", None)
@@ -106,6 +109,12 @@ class NativeRuntime:
             self._configure_ffn_row4.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_ffn_row4.restype = ctypes.c_int
         if self._query_ffn_row4 is not None:
             self._query_ffn_row4.argtypes = [ctypes.c_void_p]; self._query_ffn_row4.restype = ctypes.c_int
+        if self._configure_ffn_f16_storage is not None:
+            self._configure_ffn_f16_storage.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_ffn_f16_storage.restype = ctypes.c_int
+        if self._query_ffn_f16_storage is not None:
+            self._query_ffn_f16_storage.argtypes = [ctypes.c_void_p]; self._query_ffn_f16_storage.restype = ctypes.c_int
+        if self._query_f16c_available is not None:
+            self._query_f16c_available.argtypes = []; self._query_f16c_available.restype = ctypes.c_int
         if self._configure_gqa_k_shared is not None:
             self._configure_gqa_k_shared.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_gqa_k_shared.restype = ctypes.c_int
         if self._query_gqa_k_shared is not None:
@@ -273,6 +282,30 @@ class NativeRuntime:
         self._check()
         if self._query_ffn_row4 is None: return False
         return bool(self._query_ffn_row4(self._handle))
+
+    def configure_ffn_f16_storage(self, enabled=True):
+        self._check()
+        if self._configure_ffn_f16_storage is None:
+            if not enabled: return
+            raise NativeError("native runtime does not support FP16 FFN storage")
+        status = int(self._configure_ffn_f16_storage(self._handle, int(bool(enabled))))
+        if status == 0: return
+        if status == -2:
+            raise NativeError("FP16 FFN storage rejected: weights are not exactly reconstructible or F16C is unavailable")
+        if status == -3:
+            raise NativeError("FP16 FFN storage cannot be combined with FFN row4")
+        raise NativeError("mm_configure_ffn_f16_storage failed")
+
+    @property
+    def ffn_f16_storage(self):
+        self._check()
+        if self._query_ffn_f16_storage is None: return False
+        return bool(self._query_ffn_f16_storage(self._handle))
+
+    @property
+    def f16c_available(self):
+        if self._query_f16c_available is None: return False
+        return bool(self._query_f16c_available())
 
     def configure_gqa_k_shared(self, enabled=True):
         self._check()

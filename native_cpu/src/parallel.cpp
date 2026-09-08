@@ -103,10 +103,11 @@ struct AffinityGuard {
 } // namespace
 
 struct ParallelTeam::Job {
-    enum class Kind : std::uint8_t { F32, F32Row4, Q4 };
+    enum class Kind : std::uint8_t { F32, F32Row4, F16, Q4 };
 
     Kind kind = Kind::F32;
     const float* weights = nullptr;
+    const std::uint16_t* f16_weights = nullptr;
     const std::uint8_t* packed = nullptr;
     const float* scales = nullptr;
     const float* x = nullptr;
@@ -187,6 +188,13 @@ struct ParallelTeam::State {
             mm::gemv_f32_row4(job.weights + range.begin * job.cols, job.x,
                               job.y + range.begin, range.end - range.begin,
                               job.cols, job.mode);
+            if (profiled) { state->participant_slots[participant].ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count()); ++state->participant_slots[participant].calls; }
+            return;
+        }
+        if (job.kind == ParallelTeam::Job::Kind::F16) {
+            mm::gemv_f16(job.f16_weights + range.begin * job.cols, job.x,
+                         job.y + range.begin, range.end - range.begin,
+                         job.cols, job.mode);
             if (profiled) { state->participant_slots[participant].ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count()); ++state->participant_slots[participant].calls; }
             return;
         }
@@ -456,6 +464,8 @@ void ParallelTeam::dispatch(const Job& job) {
             mm::gemv_f32(job.weights, job.x, job.y, job.rows, job.cols, job.mode);
         } else if (job.kind == Job::Kind::F32Row4) {
             mm::gemv_f32_row4(job.weights, job.x, job.y, job.rows, job.cols, job.mode);
+        } else if (job.kind == Job::Kind::F16) {
+            mm::gemv_f16(job.f16_weights, job.x, job.y, job.rows, job.cols, job.mode);
         } else {
             mm::gemv_q4(job.packed, job.scales, job.x, job.y, job.rows, job.cols, job.mode);
         }
@@ -506,6 +516,20 @@ void ParallelTeam::gemv_f32_row4(const float* weights, const float* x, float* y,
     Job job;
     job.kind = Job::Kind::F32Row4;
     job.weights = weights;
+    job.x = x;
+    job.y = y;
+    job.rows = rows;
+    job.cols = cols;
+    job.mode = mode;
+    dispatch(job);
+}
+
+void ParallelTeam::gemv_f16(const std::uint16_t* weights, const float* x,
+                             float* y, std::size_t rows, std::size_t cols,
+                             KernelMode mode) {
+    Job job;
+    job.kind = Job::Kind::F16;
+    job.f16_weights = weights;
     job.x = x;
     job.y = y;
     job.rows = rows;

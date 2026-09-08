@@ -84,6 +84,16 @@ counted as fallbacks. The flag is off by default; paired evidence, diagnostics,
 raw receipts and the six-turn parity check are in
 [`benchmarks/cpu-r5/RESULTS.md`](benchmarks/cpu-r5/RESULTS.md).
 
+CPU-R6 adds the opt-in `--ffn-f16-storage` route. It validates every dense
+`gate_proj`, `up_proj` and `down_proj` weight by an FP32→FP16→FP32 bit-for-bit
+round trip, prepares the half storage once, and converts eight weights directly
+to FP32 registers in the existing FMA GEMV order. Runtime F16C/AVX2/FMA support
+is required; a non-reconstructible tensor, quantized FFN tensor, or missing
+instruction support rejects activation and leaves the FP32 path selected. The
+FP32 vectors remain allocated for reference, so compact storage is reported as
+additional runtime memory rather than a total-RAM reduction. CPU-R3 row4 and
+CPU-R6 are mutually exclusive, and the new flag is off by default.
+
 Use `/clear` to reset the conversation and random generator, and `/exit` to quit.
 A one-shot invocation:
 

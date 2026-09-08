@@ -93,6 +93,43 @@ void test_q4_known_nibbles() {
   assert(output == -8.0f);
 }
 
+std::uint32_t float_bits(float value) {
+  std::uint32_t bits = 0;
+  std::memcpy(&bits, &value, sizeof(bits));
+  return bits;
+}
+
+void test_f16_storage_exact() {
+  const float exact[] = {
+      0.0f, -0.0f, 1.0f, -2.0f, 0.5f,
+      std::ldexp(1.0f, -24), 65504.0f, -65504.0f};
+  for (float value : exact) {
+    const auto half = mm::f32_to_f16(value);
+    const float restored = mm::f16_to_f32(half);
+    assert(float_bits(restored) == float_bits(value));
+  }
+  // The activation contract is exact, not an error-tolerance check.
+  assert(float_bits(mm::f16_to_f32(mm::f32_to_f16(0.1f))) != float_bits(0.1f));
+
+  constexpr std::size_t rows = 5, cols = 9;
+  std::vector<float> weights(rows * cols), input(cols), reference(rows), compact(rows);
+  for (std::size_t i = 0; i < weights.size(); ++i) {
+    static constexpr float values[] = {0.0f, -0.0f, 0.5f, -1.0f, 2.0f,
+                                       0.25f, -0.125f, 4.0f, -8.0f};
+    weights[i] = values[i % (sizeof(values) / sizeof(values[0]))];
+  }
+  for (std::size_t i = 0; i < cols; ++i) input[i] = std::sin(static_cast<float>(i) * 0.37f);
+  std::vector<std::uint16_t> packed(weights.size());
+  for (std::size_t i = 0; i < weights.size(); ++i) packed[i] = mm::f32_to_f16(weights[i]);
+  for (mm::KernelMode mode : {mm::KernelMode::Scalar, mm::KernelMode::Auto}) {
+    mm::gemv_f32(weights.data(), input.data(), reference.data(), rows, cols, mode);
+    mm::gemv_f16(packed.data(), input.data(), compact.data(), rows, cols, mode);
+    if (mode == mm::KernelMode::Scalar || mm::f16c_available()) {
+      assert(std::memcmp(reference.data(), compact.data(), rows * sizeof(float)) == 0);
+    }
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -106,6 +143,7 @@ int main() {
   test_q4(4, 2432);
   test_q4_zero_rows();
   test_q4_known_nibbles();
+  test_f16_storage_exact();
   std::cout << "mm kernels tests passed (scalar reference and auto dispatch)\n";
   return 0;
 }

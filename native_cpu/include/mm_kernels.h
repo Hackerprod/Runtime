@@ -14,6 +14,15 @@ enum class KernelMode : int {
 // register state required to execute them.
 bool avx2_fma_available() noexcept;
 
+// Reports whether the OS and CPU expose the AVX2/FMA/F16C state required by
+// the compact-FP16 storage kernel.
+bool f16c_available() noexcept;
+
+// IEEE-754 conversions used to validate the compact weight representation.
+// The conversion is round-to-nearest-even and does not require F16C.
+std::uint16_t f32_to_f16(float value) noexcept;
+float f16_to_f32(std::uint16_t value) noexcept;
+
 // Returns the implementation selected by mode ("scalar" or "avx2").
 const char* kernel_name(KernelMode mode) noexcept;
 
@@ -30,6 +39,13 @@ void gemv_f32(const float* weights, const float* x, float* y,
 void gemv_f32_row4(const float* weights, const float* x, float* y,
                    std::size_t rows, std::size_t cols,
                    KernelMode mode = KernelMode::Auto) noexcept;
+
+// Row-major FP16-storage matrix-vector product. Weights are converted to
+// FP32 in vector registers and accumulated with the same FP32 FMA/reduction
+// order as gemv_f32. Callers must dispatch this only when f16c_available().
+void gemv_f16(const std::uint16_t* weights, const float* x, float* y,
+              std::size_t rows, std::size_t cols,
+              KernelMode mode = KernelMode::Auto) noexcept;
 
 // Row-major symmetric packed-Q4 matrix-vector product. Each row has
 // ceil(cols / 2) bytes and ceil(cols / 32) FP32 scales. The even element is

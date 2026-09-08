@@ -111,14 +111,18 @@ def build_session(args):
         reuse_kv = bool(getattr(args, "reuse_kv", False))
         v_blocked_attention = bool(getattr(args, "v_blocked_attention", False))
         ffn_row4 = bool(getattr(args, "ffn_row4", False))
+        ffn_f16_storage = bool(getattr(args, "ffn_f16_storage", False))
         gqa_k_shared = bool(getattr(args, "gqa_k_shared", False))
         gqa_v_shared = bool(getattr(args, "gqa_v_shared", False))
-        if args.backend == "original" and (threads != 1 or cpus is not None or row_weights is not None or selective_logits or diagnostics or reuse_kv or v_blocked_attention or ffn_row4 or gqa_k_shared or gqa_v_shared):
+        if ffn_row4 and ffn_f16_storage:
+            raise ValueError("--ffn-row4 and --ffn-f16-storage are mutually exclusive")
+        if args.backend == "original" and (threads != 1 or cpus is not None or row_weights is not None or selective_logits or diagnostics or reuse_kv or v_blocked_attention or ffn_row4 or ffn_f16_storage or gqa_k_shared or gqa_v_shared):
             if selective_logits: raise ValueError("--selective-logits is supported only by the native backend")
             if diagnostics: raise ValueError("--diagnostics is supported only by the native backend")
             if reuse_kv: raise ValueError("--reuse-kv is supported only by the native backend")
             if v_blocked_attention: raise ValueError("--v-blocked-attention is supported only by the native backend")
             if ffn_row4: raise ValueError("--ffn-row4 is supported only by the native backend")
+            if ffn_f16_storage: raise ValueError("--ffn-f16-storage is supported only by the native backend")
             if gqa_k_shared: raise ValueError("--gqa-k-shared is supported only by the native backend")
             if gqa_v_shared: raise ValueError("--gqa-v-shared is supported only by the native backend")
             raise ValueError("thread affinity and row-sharding options are supported only by the native backend")
@@ -146,6 +150,9 @@ def build_session(args):
         ffn = getattr(runtime, "configure_ffn_row4", None)
         if ffn_row4 and ffn is None: raise ValueError("native runtime does not support FFN row4")
         if ffn is not None: ffn(ffn_row4)
+        ffn_f16 = getattr(runtime, "configure_ffn_f16_storage", None)
+        if ffn_f16_storage and ffn_f16 is None: raise ValueError("native runtime does not support FP16 FFN storage")
+        if ffn_f16 is not None: ffn_f16(ffn_f16_storage)
         gqa = getattr(runtime, "configure_gqa_k_shared", None)
         if gqa_k_shared and gqa is None: raise ValueError("native runtime does not support shared-K GQA attention")
         if gqa is not None: gqa(gqa_k_shared)
@@ -188,6 +195,7 @@ def response_metrics(args, result, counted, loading_seconds):
             "reuse_kv": bool(getattr(args, "reuse_kv", False)),
             "v_blocked_attention": bool(getattr(args, "v_blocked_attention", False)),
             "ffn_row4": bool(getattr(args, "ffn_row4", False)),
+            "ffn_f16_storage": bool(getattr(args, "ffn_f16_storage", False)),
             "gqa_k_shared": bool(getattr(args, "gqa_k_shared", False)),
             "gqa_v_shared": bool(getattr(args, "gqa_v_shared", False)),
             "decode_tokens_per_second": counted.decode_evaluated_tokens / result.decode_seconds if counted.decode_evaluated_tokens and result.decode_seconds > 0 else None,
@@ -220,6 +228,7 @@ def make_parser():
     parser.add_argument("--reuse-kv", action="store_true", help="reuse verified KV prefixes between turns")
     parser.add_argument("--v-blocked-attention", action="store_true", help="use experimental contiguous-dimension V accumulation (off by default)")
     parser.add_argument("--ffn-row4", action="store_true", help="use experimental four-row FP32 FFN GEMV (off by default)")
+    parser.add_argument("--ffn-f16-storage", action="store_true", help="use exact FP16-storage/FP32-compute FFN GEMV (off by default)")
     parser.add_argument("--gqa-k-shared", action="store_true", help="share K reads across the two GQA query heads (off by default)")
     parser.add_argument("--gqa-v-shared", action="store_true", help="share V reads across the two GQA query heads (off by default)")
     parser.add_argument("--cpus", help="comma-separated Windows group-0 logical CPU indices in participant order")

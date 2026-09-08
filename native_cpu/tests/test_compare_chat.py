@@ -81,6 +81,10 @@ class ComparePolicyTests(unittest.TestCase):
         self.assertFalse(compare.make_parser().parse_args([]).gqa_k_shared)
         self.assertTrue(compare.make_parser().parse_args(["--gqa-k-shared"]).gqa_k_shared)
 
+    def test_gqa_v_shared_flag_is_opt_in(self):
+        self.assertFalse(compare.make_parser().parse_args([]).gqa_v_shared)
+        self.assertTrue(compare.make_parser().parse_args(["--gqa-v-shared"]).gqa_v_shared)
+
     def test_chat_profile_defaults(self):
         args = compare.resolve_policy(compare.make_parser().parse_args([]))
         self.assertEqual(args.temperature, 0.9)

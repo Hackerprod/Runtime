@@ -24,3 +24,7 @@ def test_stats_abi_is_stable_and_exposed():
     assert hasattr(NativeRuntime, "gqa_k_shared")
     assert hasattr(NativeRuntime, "attention_qk_ns")
     assert hasattr(NativeRuntime, "stats_abi_incompatible")
+    assert hasattr(NativeRuntime, "configure_gqa_v_shared")
+    assert hasattr(NativeRuntime, "gqa_v_shared")
+    assert hasattr(NativeRuntime, "attention_v_ns")
+    assert hasattr(NativeRuntime, "gqa_v_shared_fallbacks")

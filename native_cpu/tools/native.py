@@ -88,6 +88,8 @@ class NativeRuntime:
         self._query_ffn_row4 = getattr(lib, "mm_ffn_row4", None)
         self._configure_gqa_k_shared = getattr(lib, "mm_configure_gqa_k_shared", None)
         self._query_gqa_k_shared = getattr(lib, "mm_gqa_k_shared", None)
+        self._configure_gqa_v_shared = getattr(lib, "mm_configure_gqa_v_shared", None)
+        self._query_gqa_v_shared = getattr(lib, "mm_gqa_v_shared", None)
         self._query_logits_valid = getattr(lib, "mm_logits_valid", None)
         self._query_epoch = getattr(lib, "mm_cache_epoch", None)
         if self._configure_selective is not None:
@@ -108,6 +110,10 @@ class NativeRuntime:
             self._configure_gqa_k_shared.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_gqa_k_shared.restype = ctypes.c_int
         if self._query_gqa_k_shared is not None:
             self._query_gqa_k_shared.argtypes = [ctypes.c_void_p]; self._query_gqa_k_shared.restype = ctypes.c_int
+        if self._configure_gqa_v_shared is not None:
+            self._configure_gqa_v_shared.argtypes = [ctypes.c_void_p, ctypes.c_int]; self._configure_gqa_v_shared.restype = ctypes.c_int
+        if self._query_gqa_v_shared is not None:
+            self._query_gqa_v_shared.argtypes = [ctypes.c_void_p]; self._query_gqa_v_shared.restype = ctypes.c_int
         if self._query_logits_valid is not None:
             self._query_logits_valid.argtypes = [ctypes.c_void_p]; self._query_logits_valid.restype = ctypes.c_int
         if self._query_epoch is not None:
@@ -120,6 +126,8 @@ class NativeRuntime:
         self._reset_stats = getattr(lib, "mm_reset_stats", None)
         self._get_stats = getattr(lib, "mm_get_stats", None)
         self._query_attention_qk_ns = getattr(lib, "mm_get_attention_qk_ns", None)
+        self._query_attention_v_ns = getattr(lib, "mm_get_attention_v_ns", None)
+        self._query_gqa_v_shared_fallbacks = getattr(lib, "mm_get_gqa_v_shared_fallbacks", None)
         self._stats_abi_incompatible = self._get_stats is not None and self._configure_gqa_k_shared is not None and self._query_attention_qk_ns is None
         if self._configure_threads is not None:
             self._configure_threads.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
@@ -140,6 +148,10 @@ class NativeRuntime:
             self._get_stats.argtypes = [ctypes.c_void_p, ctypes.POINTER(_MmRuntimeStats)]; self._get_stats.restype = ctypes.c_int
         if self._query_attention_qk_ns is not None:
             self._query_attention_qk_ns.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64)]; self._query_attention_qk_ns.restype = ctypes.c_int
+        if self._query_attention_v_ns is not None:
+            self._query_attention_v_ns.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64)]; self._query_attention_v_ns.restype = ctypes.c_int
+        if self._query_gqa_v_shared_fallbacks is not None:
+            self._query_gqa_v_shared_fallbacks.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64)]; self._query_gqa_v_shared_fallbacks.restype = ctypes.c_int
 
     def _configure(self, threads, cpus, row_weights):
         cpu_array = None if cpus is None else (ctypes.c_uint32 * len(cpus))(*cpus)
@@ -276,6 +288,20 @@ class NativeRuntime:
         if self._query_gqa_k_shared is None: return False
         return bool(self._query_gqa_k_shared(self._handle))
 
+    def configure_gqa_v_shared(self, enabled=True):
+        self._check()
+        if self._configure_gqa_v_shared is None:
+            if not enabled: return
+            raise NativeError("native runtime does not support shared-V GQA attention")
+        if int(self._configure_gqa_v_shared(self._handle, int(bool(enabled)))) != 0:
+            raise NativeError("mm_configure_gqa_v_shared failed")
+
+    @property
+    def gqa_v_shared(self):
+        self._check()
+        if self._query_gqa_v_shared is None: return False
+        return bool(self._query_gqa_v_shared(self._handle))
+
     def configure_profile(self, enabled=True):
         self._check()
         if self._configure_profile is None:
@@ -312,6 +338,8 @@ class NativeRuntime:
             if int(self._query_attention_qk_ns(self._handle, ctypes.byref(qk))) != 0:
                 raise NativeError("mm_get_attention_qk_ns failed")
             result["attention_qk_ns"] = int(qk.value)
+        result["attention_v_ns"] = self.attention_v_ns
+        result["gqa_v_shared_fallbacks"] = self.gqa_v_shared_fallbacks
         return result
 
     @property
@@ -325,6 +353,26 @@ class NativeRuntime:
         if int(self._query_attention_qk_ns(self._handle, ctypes.byref(qk))) != 0:
             raise NativeError("mm_get_attention_qk_ns failed")
         return int(qk.value)
+
+    @property
+    def attention_v_ns(self):
+        self._check()
+        if self._query_attention_v_ns is None:
+            return None
+        value = ctypes.c_uint64()
+        if int(self._query_attention_v_ns(self._handle, ctypes.byref(value))) != 0:
+            raise NativeError("mm_get_attention_v_ns failed")
+        return int(value.value)
+
+    @property
+    def gqa_v_shared_fallbacks(self):
+        self._check()
+        if self._query_gqa_v_shared_fallbacks is None:
+            return None
+        count = ctypes.c_uint64()
+        if int(self._query_gqa_v_shared_fallbacks(self._handle, ctypes.byref(count))) != 0:
+            raise NativeError("mm_get_gqa_v_shared_fallbacks failed")
+        return int(count.value)
 
     @property
     def lm_head_calls(self):

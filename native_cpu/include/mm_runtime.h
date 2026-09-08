@@ -53,6 +53,13 @@ MM_RUNTIME_API int mm_configure_ffn_row4(void* runtime, int enabled);
 MM_RUNTIME_API int mm_ffn_row4(void* runtime);
 MM_RUNTIME_API int mm_configure_gqa_k_shared(void* runtime, int enabled);
 MM_RUNTIME_API int mm_gqa_k_shared(void* runtime);
+MM_RUNTIME_API int mm_configure_gqa_v_shared(void* runtime, int enabled);
+MM_RUNTIME_API int mm_gqa_v_shared(void* runtime);
+/* Optional CPU-R5 diagnostics. Missing symbols mean unavailable. */
+MM_RUNTIME_API int mm_get_attention_v_ns(void* runtime, uint64_t* out_ns);
+MM_RUNTIME_API int mm_get_gqa_v_shared_fallbacks(void* runtime, uint64_t* out_count);
+/* Copy the most recently evaluated layer attention before output projection. */
+MM_RUNTIME_API int mm_get_last_attention(void* runtime, float* out, size_t capacity, size_t* out_count);
 MM_RUNTIME_API int mm_truncate(void* runtime, uint32_t position, char* error, size_t error_cap);
 MM_RUNTIME_API int mm_logits_valid(void* runtime);
 MM_RUNTIME_API uint64_t mm_cache_epoch(void* runtime);

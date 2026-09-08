@@ -76,6 +76,14 @@ unavailable rather than zero. The Python binding rejects the published CPU-R4
 DLL with the shifted statistics layout before calling `mm_get_stats`; see
 [`benchmarks/cpu-r4.1/RESULTS.md`](benchmarks/cpu-r4.1/RESULTS.md).
 
+CPU-R5 adds the opt-in `--gqa-v-shared` route. With two query heads per KV head,
+shared-K GQA and CPU-R2's 16-dimension V blocking, it reads each V block once
+and updates two independent accumulators; softmax and arithmetic order remain
+unchanged. Other ratios or missing prerequisites use the existing path and are
+counted as fallbacks. The flag is off by default; paired evidence, diagnostics,
+raw receipts and the six-turn parity check are in
+[`benchmarks/cpu-r5/RESULTS.md`](benchmarks/cpu-r5/RESULTS.md).
+
 Use `/clear` to reset the conversation and random generator, and `/exit` to quit.
 A one-shot invocation:
 

@@ -305,11 +305,14 @@ struct Runtime {
     enum class ProfileOp : std::uint32_t { Qkv, Attention, Output, Ffn, Vocab, Remaining };
     MmRuntimeStats stats{};
     std::uint64_t attention_qk_ns = 0;
+    std::uint64_t attention_v_ns = 0;
+    std::uint64_t gqa_v_shared_fallbacks = 0;
     bool profile_enabled = false;
     bool selective_logits = false;
     bool v_blocked_attention = false;
     bool ffn_row4 = false;
     bool gqa_k_shared = false;
+    bool gqa_v_shared = false;
     bool logits_valid = false;
     std::uint64_t cache_epoch = 0;
     Config config;
@@ -497,7 +500,7 @@ struct Runtime {
             std::fill(attention.begin(), attention.end(), 0.0f);
             const float inv_sqrt = 1.0f / std::sqrt(static_cast<float>(config.head_dim));
             const uint32_t total = position + 1;
-            const auto finish_attention_head = [&](uint32_t h, uint32_t kvh, float max_score) {
+            const auto normalize_attention_head = [&](uint32_t h, float max_score) {
                 float denom = 0.0f;
                 for (uint32_t t = 0; t < total; ++t) {
                     const size_t index = static_cast<size_t>(h) * max_context + t;
@@ -505,7 +508,10 @@ struct Runtime {
                     denom += scores[index];
                 }
                 for (uint32_t t = 0; t < total; ++t) scores[static_cast<size_t>(h) * max_context + t] /= denom;
+            };
+            const auto accumulate_attention_head = [&](uint32_t h, uint32_t kvh) {
                 float* const head_attention = attention.data() + static_cast<size_t>(h) * config.head_dim;
+                const auto value_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                 if (!v_blocked_attention) {
                     for (uint32_t d = 0; d < config.head_dim; ++d) {
                         float value = 0.0f;
@@ -530,8 +536,45 @@ struct Runtime {
                         }
                     }
                 }
+                if (profile_enabled) {
+                    attention_v_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - value_started).count());
+                }
+            };
+            const auto finish_attention_head = [&](uint32_t h, uint32_t kvh, float max_score) {
+                normalize_attention_head(h, max_score);
+                accumulate_attention_head(h, kvh);
+            };
+            const auto accumulate_shared_v = [&](uint32_t h0, uint32_t h1, uint32_t kvh) {
+                float* const head0 = attention.data() + static_cast<size_t>(h0) * config.head_dim;
+                float* const head1 = attention.data() + static_cast<size_t>(h1) * config.head_dim;
+                const auto value_started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+                constexpr uint32_t block_dims = 16;
+                for (uint32_t block = 0; block < config.head_dim; block += block_dims) {
+                    const uint32_t end = std::min(block + block_dims, config.head_dim);
+                    for (uint32_t d = block; d < end; ++d) {
+                        head0[d] = 0.0f;
+                        head1[d] = 0.0f;
+                    }
+                    for (uint32_t t = 0; t < total; ++t) {
+                        const float score0 = scores[static_cast<size_t>(h0) * max_context + t];
+                        const float score1 = scores[static_cast<size_t>(h1) * max_context + t];
+                        const float* const value_row = cache_v.data() + cache_offset(layer, t, kvh, block);
+                        for (uint32_t d = block; d < end; ++d) {
+                            const float value = value_row[d - block];
+                            const float product0 = score0 * value;
+                            head0[d] = head0[d] + product0;
+                            const float product1 = score1 * value;
+                            head1[d] = head1[d] + product1;
+                        }
+                    }
+                }
+                if (profile_enabled) {
+                    attention_v_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - value_started).count());
+                }
             };
             const uint32_t q_per_kv = config.q_heads / config.kv_heads;
+            const bool shared_v_ready = gqa_v_shared && gqa_k_shared && v_blocked_attention && q_per_kv == 2;
+            if (gqa_v_shared && !shared_v_ready) ++gqa_v_shared_fallbacks;
             if (gqa_k_shared && q_per_kv == 2) {
                 for (uint32_t h = 0; h < config.q_heads; h += 2) {
                     const uint32_t kvh = h / q_per_kv;
@@ -559,8 +602,14 @@ struct Runtime {
                     if (profile_enabled) {
                         attention_qk_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qk_started).count());
                     }
-                    finish_attention_head(h, kvh, max_score0);
-                    finish_attention_head(h + 1, kvh, max_score1);
+                    normalize_attention_head(h, max_score0);
+                    normalize_attention_head(h + 1, max_score1);
+                    if (shared_v_ready) {
+                        accumulate_shared_v(h, h + 1, kvh);
+                    } else {
+                        accumulate_attention_head(h, kvh);
+                        accumulate_attention_head(h + 1, kvh);
+                    }
                 }
             } else {
                 for (uint32_t h = 0; h < config.q_heads; ++h) {
@@ -709,6 +758,8 @@ MM_RUNTIME_API int mm_reset_stats(void* runtime) {
         Runtime* model = checked_runtime(runtime);
         model->stats = {};
         model->attention_qk_ns = 0;
+        model->attention_v_ns = 0;
+        model->gqa_v_shared_fallbacks = 0;
         model->parallel.reset_profile_stats();
         return 0;
     } catch (...) { return -1; }
@@ -783,6 +834,45 @@ MM_RUNTIME_API int mm_configure_gqa_k_shared(void* runtime, int enabled) {
 
 MM_RUNTIME_API int mm_gqa_k_shared(void* runtime) {
     try { return checked_runtime(runtime)->gqa_k_shared ? 1 : 0; } catch (...) { return 0; }
+}
+
+MM_RUNTIME_API int mm_configure_gqa_v_shared(void* runtime, int enabled) {
+    if (enabled != 0 && enabled != 1) return -1;
+    try { checked_runtime(runtime)->gqa_v_shared = enabled != 0; return 0; } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_gqa_v_shared(void* runtime) {
+    try { return checked_runtime(runtime)->gqa_v_shared ? 1 : 0; } catch (...) { return 0; }
+}
+
+MM_RUNTIME_API int mm_get_attention_v_ns(void* runtime, uint64_t* out_ns) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (out_ns == nullptr) return -1;
+        *out_ns = model->attention_v_ns;
+        return 0;
+    } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_get_gqa_v_shared_fallbacks(void* runtime, uint64_t* out_count) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (out_count == nullptr) return -1;
+        *out_count = model->gqa_v_shared_fallbacks;
+        return 0;
+    } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_get_last_attention(void* runtime, float* out, size_t capacity, size_t* out_count) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (out_count == nullptr) return -1;
+        *out_count = model->attention.size();
+        if (out == nullptr) return capacity == 0 ? 0 : -1;
+        if (capacity < model->attention.size()) return -1;
+        std::copy(model->attention.begin(), model->attention.end(), out);
+        return 0;
+    } catch (...) { return -1; }
 }
 
 MM_RUNTIME_API int mm_configure_threads(void* runtime, uint32_t threads,

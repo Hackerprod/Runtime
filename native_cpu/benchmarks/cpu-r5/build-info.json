@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "experiment": "CPU-R5 shared-V GQA accumulation",
+  "build_type": "Release",
+  "cmake": "C:\\\\Program Files (x86)\\\\Microsoft Visual Studio\\\\18\\\\BuildTools\\\\Common7\\\\IDE\\\\CommonExtensions\\\\Microsoft\\\\CMake\\\\CMake\\\\bin\\\\cmake.exe",
+  "compile_flags": "/DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG /W4 /permissive- /EHsc /fp:precise /std:c++20",
+  "compiler": {
+    "id": "MSVC",
+    "path": "C:\\\\Program Files (x86)\\\\Microsoft Visual Studio\\\\18\\\\BuildTools\\\\VC\\\\Tools\\\\MSVC\\\\14.50.35717\\\\bin\\\\Hostx64\\\\x64\\\\cl.exe",
+    "version": "19.50.35727.0"
+  },
+  "generator": "Visual Studio 18 2026",
+  "library": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build\\Release\\minimind_cpu.dll",
+  "library_sha256": "21ece2c41150f2cb72440df920f1364558663582d9d2ac1d9345e3567caa8c78",
+  "model": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\artifacts\\minimind-fp32.bin",
+  "model_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
+  "tokenizer_sha256": {
+    "tokenizer.json": "71f32c68cf63a15355a8fc171b7594b3d41870fe0ddb54fc6aefa55f73a4a668",
+    "tokenizer_config.json": "04ae7620b9cf93fd2d6fbf94936b0c3c4be65f30cd6ef6fa8741baac986525d1",
+    "chat_template.jinja": "97c6a9ef3f8d35044f435bb7773f1af160a7328ab6e8d2e9d67702941320a711"
+  },
+  "sources_sha256": {
+    "native_cpu/src/runtime.cpp": "577d9ba4e059d41e42a76739b7ea27a0a241d41d22ae8f097eb7c992ba95ec8b",
+    "native_cpu/include/mm_runtime.h": "2c0032a118fe59d275d096b450bbca3b92b164dd8abc851196a3848cbdbad7af",
+    "native_cpu/tests/test_runtime.cpp": "dc095fb2f078eee7b1f162a248c0f0b82268dd5fba9792266a2138f6bf006d39",
+    "native_cpu/tools/native.py": "c11178716c323f30e0c58a1ec8d33e58f465b293d2b01fa7e0cb6092b6966b4d",
+    "native_cpu/tools/chat.py": "d6e171538bea0f49f79c6f4fd1c0c0fa8e3859ad40a4a3b800aac2ff9990204c",
+    "native_cpu/tools/compare_chat.py": "58dc5a29f1e9a3ef53766cd05ab01281def258cd05c9dbab5ba33354e56116c4",
+    "native_cpu/benchmarks/cpu-r1/benchmark.py": "b11367011950470f70149843ef856362aed3210ad78c1e83a847818104d81655",
+    "native_cpu/benchmarks/cpu-r5/summarize.py": "3a4c64315462879380701c1587f2d7d0d00718435a4a19b738e156515ba2dc48",
+    "native_cpu/benchmarks/cpu-r5/chat_parity.py": "450a39aa0bbfd94d51a618955bfeac01eb57b0f11e965f8dbef0d62c3de40e34",
+    "native_cpu/README.md": "0c26bd2139e385f09cf7acab03f77875ffed6d0fbf70695d641334db89c6f66f"
+  },
+  "native_threads": 1,
+  "cpus": [
+    0
+  ],
+  "source_commit": "60c2751a7919a7482eeb3e76323827f450145ab2",
+  "benchmark_receipts_source_commit": "60c2751a7919a7482eeb3e76323827f450145ab2",
+  "configuration": {
+    "gqa_v_shared": "opt-in",
+    "gqa_k_shared": true,
+    "v_blocked_attention": true,
+    "head_block_dimensions": 16,
+    "q_per_kv_required": 2,
+    "profile_default": false
+  }
+}

@@ -352,6 +352,7 @@ def _response_json(r, args):
         "v_blocked_attention": bool(getattr(args, "v_blocked_attention", False)),
         "ffn_row4": bool(getattr(args, "ffn_row4", False)),
         "gqa_k_shared": bool(getattr(args, "gqa_k_shared", False)),
+        "gqa_v_shared": bool(getattr(args, "gqa_v_shared", False)),
     }
 
 
@@ -392,6 +393,7 @@ def main(argv=None):
     p.add_argument("--v-blocked-attention", action="store_true", help="use experimental contiguous-dimension V accumulation (off by default)")
     p.add_argument("--ffn-row4", action="store_true", help="use experimental four-row FP32 FFN GEMV (off by default)")
     p.add_argument("--gqa-k-shared", action="store_true", help="share K reads across the two GQA query heads (off by default)")
+    p.add_argument("--gqa-v-shared", action="store_true", help="share V reads across the two GQA query heads (off by default)")
     args = _resolve_profile(p.parse_args(argv))
     if args.max_new_tokens < 0: p.error("--max-new-tokens must be non-negative")
     if args.context_limit < 2: p.error("--context-limit must be at least 2")
@@ -415,6 +417,9 @@ def main(argv=None):
             gqa_k_shared = getattr(runtime, "configure_gqa_k_shared", None)
             if args.gqa_k_shared and gqa_k_shared is None: raise NativeError("native runtime does not support shared-K GQA attention")
             if gqa_k_shared is not None: gqa_k_shared(bool(args.gqa_k_shared))
+            gqa_v_shared = getattr(runtime, "configure_gqa_v_shared", None)
+            if args.gqa_v_shared and gqa_v_shared is None: raise NativeError("native runtime does not support shared-V GQA attention")
+            if gqa_v_shared is not None: gqa_v_shared(bool(args.gqa_v_shared))
             session = ChatSession(runtime, tokenizer, context_limit=args.context_limit,
                                   max_new_tokens=args.max_new_tokens,
                                   temperature=args.temperature, top_k=args.top_k,

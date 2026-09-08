@@ -326,6 +326,7 @@ struct ScopedRuntime {
 };
 
 using Logits = std::array<float, thread_vocab>;
+using PairAttention = std::array<float, 24>;
 
 Logits evaluate(void* runtime, const std::vector<int32_t>& ids) {
     char error[256]{};
@@ -339,6 +340,18 @@ Logits evaluate(void* runtime, const std::vector<int32_t>& ids) {
 }
 
 void assert_exact(const Logits& actual, const Logits& expected) {
+    assert(std::memcmp(actual.data(), expected.data(), sizeof(actual)) == 0);
+}
+
+PairAttention last_attention(void* runtime) {
+    PairAttention result{};
+    size_t count = 0;
+    assert(mm_get_last_attention(runtime, nullptr, 0, &count) == 0 && count == result.size());
+    assert(mm_get_last_attention(runtime, result.data(), result.size(), &count) == 0 && count == result.size());
+    return result;
+}
+
+void assert_attention_exact(const PairAttention& actual, const PairAttention& expected) {
     assert(std::memcmp(actual.data(), expected.data(), sizeof(actual)) == 0);
 }
 
@@ -787,6 +800,70 @@ void test_gqa_k_shared_contract() {
     std::filesystem::remove(fallback_path);
 }
 
+void test_gqa_v_shared_contract() {
+    const auto pair_path = write_file(threading_fixture(false, 2, 1), ".gqa-v-pair");
+    const std::vector<int32_t> prefix = {1, 4, 7, 2, 9, 11, 3, 8, 5};
+    const std::vector<int32_t> suffix = {6, 10, 12};
+    assert(mm_configure_gqa_v_shared(nullptr, 1) == -1);
+    assert(mm_gqa_v_shared(nullptr) == 0);
+    {
+        ScopedRuntime reference(pair_path, 0), candidate(pair_path, 0);
+        assert(mm_configure_v_blocked_attention(reference.value, 1) == 0);
+        assert(mm_configure_v_blocked_attention(candidate.value, 1) == 0);
+        assert(mm_configure_gqa_k_shared(reference.value, 1) == 0);
+        assert(mm_configure_gqa_k_shared(candidate.value, 1) == 0);
+        assert(mm_configure_gqa_v_shared(candidate.value, 1) == 0);
+        assert(mm_gqa_v_shared(candidate.value) == 1);
+        assert(mm_configure_profile(candidate.value, 1) == 0);
+
+        assert_exact(evaluate(candidate.value, prefix), evaluate(reference.value, prefix));
+        assert_attention_exact(last_attention(candidate.value), last_attention(reference.value));
+        const PairAttention distinct = last_attention(candidate.value);
+        assert(std::memcmp(distinct.data(), distinct.data() + 12, 12 * sizeof(float)) != 0);
+        assert_exact(evaluate(candidate.value, suffix), evaluate(reference.value, suffix));
+        assert_attention_exact(last_attention(candidate.value), last_attention(reference.value));
+
+        uint64_t value_ns = 0;
+        uint64_t fallbacks = 123;
+        assert(mm_get_attention_v_ns(candidate.value, &value_ns) == 0 && value_ns > 0);
+        assert(mm_get_gqa_v_shared_fallbacks(candidate.value, &fallbacks) == 0 && fallbacks == 0);
+        assert(mm_get_attention_v_ns(candidate.value, nullptr) == -1);
+        assert(mm_get_gqa_v_shared_fallbacks(candidate.value, nullptr) == -1);
+
+        // A cached-prefix truncation keeps the shared-V route bit-exact.
+        assert(mm_reset(candidate.value) == 0);
+        assert(mm_reset(reference.value) == 0);
+        assert_exact(evaluate(candidate.value, prefix), evaluate(reference.value, prefix));
+        char error[256]{};
+        assert(mm_truncate(candidate.value, 4, error, sizeof(error)) == 0);
+        assert(mm_truncate(reference.value, 4, error, sizeof(error)) == 0);
+        const std::vector<int32_t> replay = {5, 6, 10, 12};
+        assert_exact(evaluate(candidate.value, replay), evaluate(reference.value, replay));
+        assert_attention_exact(last_attention(candidate.value), last_attention(reference.value));
+
+        // Removing a prerequisite forces the original per-head V route.
+        assert(mm_configure_v_blocked_attention(candidate.value, 0) == 0);
+        const uint64_t before_fallback = fallbacks;
+        assert_exact(evaluate(candidate.value, {3}), evaluate(reference.value, {3}));
+        assert(mm_get_gqa_v_shared_fallbacks(candidate.value, &fallbacks) == 0 && fallbacks > before_fallback);
+    }
+    std::filesystem::remove(pair_path);
+
+    // The option is accepted but falls back for a non-2:1 GQA relationship.
+    const auto fallback_path = write_file(threading_fixture(false, 3, 1), ".gqa-v-fallback");
+    {
+        ScopedRuntime reference(fallback_path, 0), candidate(fallback_path, 0);
+        assert(mm_configure_v_blocked_attention(reference.value, 1) == 0);
+        assert(mm_configure_v_blocked_attention(candidate.value, 1) == 0);
+        assert(mm_configure_gqa_k_shared(candidate.value, 1) == 0);
+        assert(mm_configure_gqa_v_shared(candidate.value, 1) == 0);
+        assert_exact(evaluate(candidate.value, prefix), evaluate(reference.value, prefix));
+        uint64_t fallbacks = 0;
+        assert(mm_get_gqa_v_shared_fallbacks(candidate.value, &fallbacks) == 0 && fallbacks > 0);
+    }
+    std::filesystem::remove(fallback_path);
+}
+
 void test_ffn_row4_contract() {
     const auto path = write_file(threading_fixture(false), ".ffn-row4");
     const std::vector<int32_t> prefix = {1, 4, 7, 2, 9, 11, 3, 8, 5, 6, 10, 12};
@@ -894,6 +971,7 @@ int main() {
     test_selective_logits_contract();
     test_v_blocked_attention_contract();
     test_gqa_k_shared_contract();
+    test_gqa_v_shared_contract();
     test_ffn_row4_contract();
     test_truncate_contract();
     test_cache_reset_and_overflow();

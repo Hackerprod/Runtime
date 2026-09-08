@@ -47,6 +47,18 @@ void gemv_f16(const std::uint16_t* weights, const float* x, float* y,
               std::size_t rows, std::size_t cols,
               KernelMode mode = KernelMode::Auto) noexcept;
 
+// Experimental four-input FP16-storage matrix-vector product. The same row
+// fragment is converted once and reused for four independent FP32 inputs;
+// each output keeps gemv_f16's FMA order, horizontal reduction and scalar
+// tail. This kernel is intentionally not connected to the runtime.
+void gemv_f16_x4(const std::uint16_t* weights,
+                 const float* x0, float* y0,
+                 const float* x1, float* y1,
+                 const float* x2, float* y2,
+                 const float* x3, float* y3,
+                 std::size_t rows, std::size_t cols,
+                 KernelMode mode = KernelMode::Auto) noexcept;
+
 // Row-major symmetric packed-Q4 matrix-vector product. Each row has
 // ceil(cols / 2) bytes and ceil(cols / 32) FP32 scales. The even element is
 // stored in the low nibble; decoded value is (nibble - 8) * scale.

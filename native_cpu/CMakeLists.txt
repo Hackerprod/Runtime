@@ -25,6 +25,11 @@ if(BUILD_TESTING)
   mm_compile_options(mm_test_kernels)
   add_test(NAME mm_kernels COMMAND mm_test_kernels)
 
+  # Standalone CPU-E1 benchmark; it is not connected to the runtime or CTest.
+  add_executable(mm_bench_cpu_e1 benchmarks/cpu-e1/kernel_bench.cpp src/kernels.cpp)
+  target_include_directories(mm_bench_cpu_e1 PRIVATE include)
+  mm_compile_options(mm_bench_cpu_e1)
+
   add_executable(mm_test_runtime tests/test_runtime.cpp)
   target_link_libraries(mm_test_runtime PRIVATE minimind_cpu)
   mm_compile_options(mm_test_runtime)

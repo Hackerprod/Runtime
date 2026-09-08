@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -130,6 +131,37 @@ void test_f16_storage_exact() {
   }
 }
 
+void test_f16_x4_exact(std::size_t rows, std::size_t cols) {
+  std::vector<std::uint16_t> weights(rows * cols);
+  std::vector<float> inputs[4];
+  std::vector<float> reference[4];
+  std::vector<float> shared[4];
+  for (auto& input : inputs) input.resize(cols);
+  for (auto& output : reference) output.resize(rows);
+  for (auto& output : shared) output.resize(rows);
+  for (std::size_t i = 0; i < weights.size(); ++i) {
+    const float value = static_cast<float>(static_cast<int>((i * 37u) % 61u) - 30) * 0.03125f;
+    weights[i] = mm::f32_to_f16(value);
+  }
+  for (std::size_t lane = 0; lane < 4; ++lane) {
+    for (std::size_t col = 0; col < cols; ++col) {
+      inputs[lane][col] = std::sin(static_cast<float>(col + 1u) * (0.07f + 0.013f * static_cast<float>(lane))) +
+                          0.017f * static_cast<float>(lane + 1u);
+    }
+  }
+  for (mm::KernelMode mode : {mm::KernelMode::Scalar, mm::KernelMode::Auto}) {
+    for (std::size_t lane = 0; lane < 4; ++lane) {
+      mm::gemv_f16(weights.data(), inputs[lane].data(), reference[lane].data(), rows, cols, mode);
+    }
+    mm::gemv_f16_x4(weights.data(), inputs[0].data(), shared[0].data(),
+                    inputs[1].data(), shared[1].data(), inputs[2].data(), shared[2].data(),
+                    inputs[3].data(), shared[3].data(), rows, cols, mode);
+    for (std::size_t lane = 0; lane < 4; ++lane) {
+      assert(std::memcmp(reference[lane].data(), shared[lane].data(), rows * sizeof(float)) == 0);
+    }
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -144,6 +176,10 @@ int main() {
   test_q4_zero_rows();
   test_q4_known_nibbles();
   test_f16_storage_exact();
+  for (const auto shape : {std::pair<std::size_t, std::size_t>{2432, 768},
+                           {768, 2432}, {3, 9}, {5, 17}, {7, 31}, {4, 8}}) {
+    test_f16_x4_exact(shape.first, shape.second);
+  }
   std::cout << "mm kernels tests passed (scalar reference and auto dispatch)\n";
   return 0;
 }

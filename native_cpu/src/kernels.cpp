@@ -266,6 +266,47 @@ MM_TARGET_F16C MM_NOINLINE void gemv_f16_avx2(
   }
 }
 
+MM_TARGET_F16C MM_NOINLINE void gemv_f16_x4_avx2(
+    const std::uint16_t* weights, const float* x0, float* y0,
+    const float* x1, float* y1, const float* x2, float* y2,
+    const float* x3, float* y3, std::size_t rows,
+    std::size_t cols) noexcept {
+  for (std::size_t row = 0; row < rows; ++row) {
+    const std::uint16_t* w = weights + row * cols;
+    __m256 acc0 = _mm256_setzero_ps();
+    __m256 acc1 = _mm256_setzero_ps();
+    __m256 acc2 = _mm256_setzero_ps();
+    __m256 acc3 = _mm256_setzero_ps();
+    std::size_t col = 0;
+    for (; col + 8u <= cols; col += 8u) {
+      // Convert each weight fragment once, then reuse it for all four
+      // independent inputs. Each accumulator follows gemv_f16's arithmetic.
+      const __m128i packed = _mm_loadu_si128(
+          reinterpret_cast<const __m128i*>(w + col));
+      const __m256 converted = _mm256_cvtph_ps(packed);
+      acc0 = _mm256_fmadd_ps(converted, _mm256_loadu_ps(x0 + col), acc0);
+      acc1 = _mm256_fmadd_ps(converted, _mm256_loadu_ps(x1 + col), acc1);
+      acc2 = _mm256_fmadd_ps(converted, _mm256_loadu_ps(x2 + col), acc2);
+      acc3 = _mm256_fmadd_ps(converted, _mm256_loadu_ps(x3 + col), acc3);
+    }
+    float sum0 = horizontal_sum(acc0);
+    float sum1 = horizontal_sum(acc1);
+    float sum2 = horizontal_sum(acc2);
+    float sum3 = horizontal_sum(acc3);
+    for (; col < cols; ++col) {
+      const float converted = f16_to_f32_impl(w[col]);
+      sum0 += converted * x0[col];
+      sum1 += converted * x1[col];
+      sum2 += converted * x2[col];
+      sum3 += converted * x3[col];
+    }
+    y0[row] = sum0;
+    y1[row] = sum1;
+    y2[row] = sum2;
+    y3[row] = sum3;
+  }
+}
+
 MM_TARGET_AVX2 MM_NOINLINE void gemv_q4_avx2(
     const std::uint8_t* packed, const float* scales, const float* x,
     float* y, std::size_t rows, std::size_t cols) noexcept {
@@ -366,6 +407,41 @@ void gemv_f16(const std::uint16_t* weights, const float* x, float* y,
     float sum = 0.0f;
     for (std::size_t col = 0; col < cols; ++col) sum += f16_to_f32_impl(weights[row * cols + col]) * x[col];
     y[row] = sum;
+  }
+}
+
+void gemv_f16_x4(const std::uint16_t* weights,
+                 const float* x0, float* y0,
+                 const float* x1, float* y1,
+                 const float* x2, float* y2,
+                 const float* x3, float* y3,
+                 std::size_t rows, std::size_t cols,
+                 KernelMode mode) noexcept {
+  if (weights == nullptr || x0 == nullptr || y0 == nullptr ||
+      x1 == nullptr || y1 == nullptr || x2 == nullptr || y2 == nullptr ||
+      x3 == nullptr || y3 == nullptr || rows == 0 || cols == 0) {
+    return;
+  }
+  if (mode == KernelMode::Auto && f16c_available()) {
+    gemv_f16_x4_avx2(weights, x0, y0, x1, y1, x2, y2, x3, y3, rows, cols);
+    return;
+  }
+  for (std::size_t row = 0; row < rows; ++row) {
+    float sum0 = 0.0f;
+    float sum1 = 0.0f;
+    float sum2 = 0.0f;
+    float sum3 = 0.0f;
+    for (std::size_t col = 0; col < cols; ++col) {
+      const float converted = f16_to_f32_impl(weights[row * cols + col]);
+      sum0 += converted * x0[col];
+      sum1 += converted * x1[col];
+      sum2 += converted * x2[col];
+      sum3 += converted * x3[col];
+    }
+    y0[row] = sum0;
+    y1[row] = sum1;
+    y2[row] = sum2;
+    y3[row] = sum3;
   }
 }
 

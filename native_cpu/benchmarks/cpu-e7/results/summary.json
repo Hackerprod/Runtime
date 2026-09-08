@@ -1,7 +1,7 @@
 {
   "identity": {
     "schema": "cpu-e7/isolated-lm-head-v1",
-    "source_commit": "3e9309a7dc0b870e4673faf3870bc91a4e8d4b52",
+    "source_commit": "77b56f0c006d4a46e21b23534ab37fb5dd891451",
     "checkpoint_sha256": "3adf69402b5d22e693151cabadc12528f923c4ba6bf343738aaf13f0892162e8",
     "artifact_sha256": "bcab52e67825061ffc3bd4480dbda1d5067bc3a0e51aba386a236c7131766f33",
     "benchmark_executable": "D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\native_cpu\\build-e7\\Release\\mm_bench_cpu_e7.exe",

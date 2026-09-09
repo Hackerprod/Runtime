@@ -234,8 +234,39 @@ def _canonical_pair(number: int, order: tuple[str, str], libraries: dict[str, Pa
     return record
 
 
-def _summarize(records: list[dict], canonical: list[dict], identity: dict) -> str:
-    lines = ["# CPU-E8: exact FP16 LM-head integration", "", "Status: **PASS**",
+def _evaluate(records: list[dict], canonical: list[dict]) -> dict:
+    forced = {}
+    for length in (256, 1792):
+        rows = [record for record in records if record["workload"] == "forced" and record["length"] == length]
+        reductions = [1.0 - row["entries"]["B"]["decode_seconds"] / row["entries"]["A"]["decode_seconds"] for row in rows]
+        forced[length] = {
+            "pairs": len(rows), "parity": all(row["comparison_result"]["parity"] for row in rows),
+            "decode_time_reductions": reductions,
+            "median_decode_time_reduction": statistics.median(reductions) if reductions else None,
+            "favorable_pairs": sum(value > 0.0 for value in reductions),
+        }
+    repetitive_rows = [record for record in records if record["workload"] == "repetitive"]
+    repetitive_changes = [row["entries"]["B"]["output_decode_tokens_per_second"] /
+                          row["entries"]["A"]["output_decode_tokens_per_second"] - 1.0
+                          for row in repetitive_rows]
+    canonical_changes = [row["entries"]["B"]["output_tokens_per_second"] /
+                         row["entries"]["A"]["output_tokens_per_second"] - 1.0
+                         for row in canonical]
+    parity = all(row["comparison_result"]["parity"] for row in records + canonical)
+    criteria = {
+        "parity": parity,
+        "forced_256_decode_improves": forced[256]["median_decode_time_reduction"] is not None and forced[256]["median_decode_time_reduction"] > 0.0,
+        "forced_1792_decode_improves": forced[1792]["median_decode_time_reduction"] is not None and forced[1792]["median_decode_time_reduction"] > 0.0,
+        "canonical_median_output_improves": bool(canonical_changes) and statistics.median(canonical_changes) > 0.0,
+        "repetitive_no_reproducible_regression": bool(repetitive_changes) and statistics.median(repetitive_changes) >= 0.0,
+    }
+    return {"accepted": all(criteria.values()), "criteria": criteria,
+            "forced": forced, "canonical_output_changes": canonical_changes,
+            "repetitive_output_changes": repetitive_changes}
+
+
+def _summarize(records: list[dict], canonical: list[dict], identity: dict, evaluation: dict) -> str:
+    lines = ["# CPU-E8: exact FP16 LM-head integration", "", f"Status: **{'PASS' if evaluation['accepted'] else 'REJECTED'}**",
              "", f"- Source commit: `{identity['source_commit']}`",
              f"- CPU-E6 baseline DLL SHA-256: `{identity['baseline_library_sha256']}`",
              f"- CPU-E8 candidate DLL SHA-256: `{identity['candidate_library_sha256']}`",
@@ -270,7 +301,10 @@ def _summarize(records: list[dict], canonical: list[dict], identity: dict) -> st
                      f"{int((a.get('speculative_decode') or {}).get('verify_calls', 0))} | "
                      f"{int((b.get('speculative_decode') or {}).get('verify_calls', 0))} | "
                      f"{'PASS' if record['comparison_result']['parity'] else 'FAIL'} |")
-    lines += ["", f"LM-head compact representation: {LM_HEAD_BYTES} bytes; preparation is reported separately and excluded from timed inference.", ""]
+    lines += ["", f"LM-head compact representation: {LM_HEAD_BYTES} bytes; preparation is reported separately and excluded from timed inference.", "",
+              "## Verdict", "", f"- Accepted for production: **{'yes' if evaluation['accepted'] else 'no'}**",
+              f"- Criteria: `{json.dumps(evaluation['criteria'], sort_keys=True)}`", "",
+              "A rejected result preserves the raw receipts but does not change the CPU-E6 production baseline.", ""]
     return "\n".join(lines)
 
 
@@ -327,11 +361,14 @@ def main(argv=None) -> int:
     for number in range(1, PAIR_COUNT + 1):
         order = ("A", "B") if number % 2 else ("B", "A")
         canonical.append(_canonical_pair(number, order, libraries, args.out))
+    evaluation = _evaluate(records, canonical)
+    identity["verdict"] = "accepted" if evaluation["accepted"] else "rejected"
     write_json(args.out / "identity.json", identity)
-    write_json(args.out / "summary.json", {"identity": identity, "status": "PASS",
-                                            "records": records, "canonical": canonical})
-    (args.out / "RESULTS.md").write_text(_summarize(records, canonical, identity), encoding="utf-8")
-    print(json.dumps({"status": "PASS", "candidate_sha256": candidate_sha, "out": str(args.out.resolve())}, indent=2))
+    write_json(args.out / "summary.json", {"identity": identity, "status": identity["verdict"],
+                                            "evaluation": evaluation, "records": records, "canonical": canonical})
+    (args.out / "RESULTS.md").write_text(_summarize(records, canonical, identity, evaluation), encoding="utf-8")
+    print(json.dumps({"status": identity["verdict"], "candidate_sha256": candidate_sha,
+                      "out": str(args.out.resolve()), "evaluation": evaluation}, indent=2))
     return 0
 
 

@@ -15,7 +15,9 @@ class CanonicalGuardTests(unittest.TestCase):
     def test_prompt_and_policy_identity_are_fixed(self):
         self.assertEqual(canonical.PROMPT, "Could you tell me about programming languages?")
         self.assertEqual(canonical.EXPECTED_DLL_SHA256,
-                         "b410e642e2249a8982a9a83b134f3d7f5e1f37c677f11d10900ed0e213cb97ab")
+                         "ab464cc1c91aedd3b33bf995fef82657e2316123979e6f1d04d15bb4eace72fd")
+        self.assertEqual(canonical.DLL, ROOT / "native_cpu" / "benchmarks" / "cpu-e6" / "baseline" / "minimind_cpu.dll")
+        self.assertEqual(canonical.RESULTS, ROOT / "compare_cpu" / "canonical-results" / "cpu-e6")
 
     def test_rates_use_the_requested_numerators(self):
         metrics = {"decode_seconds": 2.0, "generated_tokens": 8,

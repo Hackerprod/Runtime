@@ -1,0 +1,3 @@
+Loading native CPU FP32 model and verifying local files...
+backend=native/avx2, CPU FP32, threads=1, cpus=[0], row_weights=[1], context=2048, max_new_tokens=256, profile=chat, temperature=0.9, top_k=50, top_p=0.85, seed=0, system='你是MiniMind，一个乐于助人、知识渊博的AI助手。请用完整且友好的方式回答用户问题。'
+loading=2.666s; buffered output (prefill timing is not observed streaming TTFT)

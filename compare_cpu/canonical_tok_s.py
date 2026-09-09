@@ -1,4 +1,4 @@
-"""Run and record the three-run canonical CPU-E4 output-throughput guard."""
+"""Run and record the three-run canonical CPU-E6 output-throughput guard."""
 from __future__ import annotations
 
 import hashlib
@@ -12,11 +12,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMPT = "Could you tell me about programming languages?"
-EXPECTED_DLL_SHA256 = "b410e642e2249a8982a9a83b134f3d7f5e1f37c677f11d10900ed0e213cb97ab"
-DLL = ROOT / "native_cpu" / "benchmarks" / "cpu-e4" / "baseline" / "minimind_cpu.dll"
+EXPECTED_DLL_SHA256 = "ab464cc1c91aedd3b33bf995fef82657e2316123979e6f1d04d15bb4eace72fd"
+DLL = ROOT / "native_cpu" / "benchmarks" / "cpu-e6" / "baseline" / "minimind_cpu.dll"
 MODEL = ROOT / "native_cpu" / "artifacts" / "minimind-fp32.bin"
 CHECKPOINT = ROOT / "checkpoints" / "minimind-3-hf"
-RESULTS = ROOT / "compare_cpu" / "canonical-results"
+RESULTS = ROOT / "compare_cpu" / "canonical-results" / "cpu-e6"
 
 
 def sha256_file(path: Path) -> str:
@@ -88,10 +88,10 @@ def main(argv=None) -> int:
     dll = args.library.resolve()
     results = args.results.resolve()
     if not dll.is_file():
-        raise FileNotFoundError(f"missing CPU-E4 DLL: {dll}")
+        raise FileNotFoundError(f"missing CPU-E6 DLL: {dll}")
     actual_sha = sha256_file(dll)
     if actual_sha != args.expected_sha256.lower():
-        raise RuntimeError(f"CPU-E4 DLL SHA-256 mismatch: expected {args.expected_sha256.lower()}, found {actual_sha}")
+        raise RuntimeError(f"CPU-E6 DLL SHA-256 mismatch: expected {args.expected_sha256.lower()}, found {actual_sha}")
     metrics_rows = [run_once(index, dll, results) for index in range(1, 4)]
     rows = [item[0] for item in metrics_rows]
     output_rates = [_metric_rate(row, "generated_tokens") for row in rows]
@@ -144,8 +144,8 @@ def main(argv=None) -> int:
 
 
 def render_summary(summary: dict) -> str:
-    lines = ["# PERF-G1: canonical output throughput guard", "",
-             "CPU-E4 exact baseline; three fresh processes; profiler off; one participant pinned to CPU 0.", "",
+    lines = ["# PERF-G1.1: canonical output throughput guard", "",
+             "CPU-E6 exact baseline; three fresh processes; profiler off; one participant pinned to CPU 0.", "",
              f"- Prompt: `{PROMPT}`", f"- DLL SHA-256: `{summary['dll']['sha256']}`", "",
              "| Run | Output tok/s | Legacy target tok/s | Prefill (s) | Decode (s) | Generated |",
              "|---:|---:|---:|---:|---:|---:|"]

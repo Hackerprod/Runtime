@@ -13,6 +13,8 @@ set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 set "HF_HUB_OFFLINE=1"
 set "TRANSFORMERS_OFFLINE=1"
+rem Default canonical guard is CPU-E6; set CANONICAL_LIBRARY and
+rem CANONICAL_EXPECTED_SHA256 only for an explicit A/B comparison.
 pushd "%~dp0.." || goto :missing_repo
 if defined CANONICAL_LIBRARY (
     if not defined CANONICAL_EXPECTED_SHA256 goto :missing_canonical_hash

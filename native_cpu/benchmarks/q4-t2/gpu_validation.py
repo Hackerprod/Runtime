@@ -11,6 +11,11 @@ from __future__ import annotations
 import json
 import statistics
 from pathlib import Path
+import sys
+
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import torch
@@ -25,7 +30,6 @@ from model.quantization.qat import (
 )
 
 
-ROOT = Path(__file__).resolve().parents[3]
 GOLDEN = ROOT / "model" / "quantization" / "golden_vectors.json"
 
 

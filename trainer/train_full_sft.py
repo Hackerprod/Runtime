@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 
 __package__ = "trainer"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -13,12 +14,21 @@ import torch.distributed as dist
 from contextlib import nullcontext
 from torch import optim, nn
 from torch.nn.parallel import DistributedDataParallel
-from torch.utils.data import DataLoader, DistributedSampler
-from model.model_minimind import MiniMindConfig
+from transformers import AutoTokenizer
+from model.model_minimind import MiniMindConfig, MiniMindForCausalLM
 from dataset.lm_dataset import SFTDataset
-from trainer.trainer_utils import get_lr, Logger, is_main_process, lm_checkpoint, init_distributed_mode, setup_seed, init_model, SkipBatchSampler
+from trainer.trainer_utils import get_lr, Logger, is_main_process, lm_checkpoint, init_distributed_mode, setup_seed, init_model
+from trainer.sft_plan import build_deterministic_sft_loader, build_sft_index_plan
 
 warnings.filterwarnings('ignore')
+
+
+def _init_q4_t3_control_model(lm_config, parent_path, device, tokenizer_path='../model'):
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    model = MiniMindForCausalLM(lm_config)
+    parent_state_dict = torch.load(os.path.abspath(parent_path), map_location='cpu')
+    model.load_state_dict(parent_state_dict, strict=True)
+    return model.to(device), tokenizer
 
 
 def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
@@ -66,8 +76,9 @@ def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
             raw_model = getattr(raw_model, '_orig_mod', raw_model)
             state_dict = raw_model.state_dict()
             torch.save({k: v.half().cpu() for k, v in state_dict.items()}, ckp)
-            lm_checkpoint(lm_config, weight=args.save_weight, model=model, optimizer=optimizer, 
-                         epoch=epoch, step=step, wandb=wandb, save_dir='../checkpoints', scaler=scaler)
+            lm_checkpoint(lm_config, weight=args.save_weight, model=model, optimizer=optimizer,
+                         epoch=epoch, step=step, wandb=wandb, save_dir='../checkpoints', scaler=scaler,
+                         index_plan=compact_plan)
             model.train()
             del state_dict
 
@@ -85,7 +96,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MiniMind Full SFT")
     parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
     parser.add_argument('--save_weight', default='full_sft', type=str, help="保存权重的前缀名")
-    parser.add_argument("--epochs", type=int, default=2, help="训练轮数")
+    parser.add_argument("--epochs", type=int, default=1, help="训练轮数")
     parser.add_argument("--batch_size", type=int, default=16, help="batch size")
     parser.add_argument("--learning_rate", type=float, default=1e-5, help="初始学习率")
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu", help="训练设备")
@@ -100,10 +111,15 @@ if __name__ == "__main__":
     parser.add_argument('--max_seq_len', default=768, type=int, help="训练的最大截断长度（中文1token≈1.5~1.7字符）")
     parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE架构（0=否，1=是）")
     parser.add_argument('--seed', default=42, type=int, help="随机种子（DDP下每个rank为seed+rank，每轮为seed+epoch）")
+    parser.add_argument('--holdout_seed', default=4242, type=int, help="固定holdout随机种子")
+    parser.add_argument('--holdout_size', default=128, type=int, help="固定holdout样本数")
     parser.add_argument("--data_path", type=str, default="../dataset/sft_t2t_mini.jsonl", help="训练数据路径")
+    parser.add_argument('--parent_path', type=str, default='../out/pretrain_768.pth', help="Q4-T3 Parent P路径")
     parser.add_argument('--from_weight', default='pretrain', type=str, help="基于哪个权重训练，为none则不基于任何权重训练")
     parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb")
+    parser.add_argument('--expected_plan_sha256', default=None, type=str, help="可选的预期index plan SHA-256")
+    parser.add_argument('--expected_holdout_sha256', default=None, type=str, help="可选的预期holdout SHA-256")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-Full-SFT", help="wandb项目名")
     parser.add_argument("--use_compile", default=0, type=int, choices=[0, 1], help="是否使用torch.compile加速（0=否，1=是）")
     args = parser.parse_args()
@@ -133,9 +149,28 @@ if __name__ == "__main__":
         wandb.init(project=args.wandb_project, name=wandb_run_name, id=wandb_id, resume=resume)
     
     # ========== 5. 定义模型、数据、优化器 ==========
-    model, tokenizer = init_model(lm_config, args.from_weight, device=args.device)
-    train_ds = SFTDataset(args.data_path, tokenizer, max_length=args.max_seq_len)
-    train_sampler = DistributedSampler(train_ds) if dist.is_initialized() else None
+    if args.from_weight == 'pretrain':
+        model, tokenizer = _init_q4_t3_control_model(lm_config, args.parent_path, args.device)
+    else:
+        model, tokenizer = init_model(lm_config, args.from_weight, device=args.device)
+    train_ds = SFTDataset(args.data_path, tokenizer, max_length=args.max_seq_len, seed=args.seed)
+    plan = build_sft_index_plan(
+        args.data_path,
+        len(train_ds),
+        train_seed=args.seed,
+        holdout_seed=args.holdout_seed,
+        holdout_size=args.holdout_size,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        accumulation_steps=args.accumulation_steps,
+    )
+    if args.expected_plan_sha256 and plan.plan_sha256 != args.expected_plan_sha256:
+        raise RuntimeError(f'index plan SHA mismatch: {plan.plan_sha256} != {args.expected_plan_sha256}')
+    if args.expected_holdout_sha256 and plan.holdout_sha256 != args.expected_holdout_sha256:
+        raise RuntimeError(f'holdout SHA mismatch: {plan.holdout_sha256} != {args.expected_holdout_sha256}')
+    Logger(f'index plan SHA-256: {plan.plan_sha256}')
+    Logger(f'holdout SHA-256: {plan.holdout_sha256} ({len(plan.holdout_indices)} indices)')
+    compact_plan = plan.to_compact_dict()
     scaler = torch.cuda.amp.GradScaler(enabled=(args.dtype == 'float16'))
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
     
@@ -156,17 +191,45 @@ if __name__ == "__main__":
         model = DistributedDataParallel(model, device_ids=[local_rank])
     
     # ========== 8. 开始训练 ==========
+    train_source_count = 0
+    train_padded_count = 0
+    train_processed_count = 0
     for epoch in range(start_epoch, args.epochs):
-        train_sampler and train_sampler.set_epoch(epoch)
-        setup_seed(args.seed + epoch); indices = torch.randperm(len(train_ds)).tolist()
+        setup_seed(args.seed + epoch)
         skip = start_step if (epoch == start_epoch and start_step > 0) else 0
-        batch_sampler = SkipBatchSampler(train_sampler or indices, args.batch_size, skip)
-        loader = DataLoader(train_ds, batch_sampler=batch_sampler, num_workers=args.num_workers, pin_memory=True)
+        loader = build_deterministic_sft_loader(
+            train_ds,
+            plan,
+            epoch=epoch,
+            batch_size=args.batch_size,
+            skip_batches=skip,
+            num_workers=args.num_workers,
+            pin_memory=True,
+            rank=dist.get_rank() if dist.is_initialized() else 0,
+            world_size=dist.get_world_size() if dist.is_initialized() else 1,
+        )
+        train_source_count += loader.sft_num_source_samples
+        train_padded_count += loader.sft_num_padded_samples
+        train_processed_count += loader.sft_num_processed_samples
         if skip > 0: 
             Logger(f'Epoch [{epoch + 1}/{args.epochs}]: 跳过前{start_step}个step，从step {start_step + 1}开始')
             train_epoch(epoch, loader, len(loader) + skip, start_step, wandb)
         else:
             train_epoch(epoch, loader, len(loader), 0, wandb)
+
+    metadata = {
+        'trainer': 'control',
+        **compact_plan,
+        'train_source_count': train_source_count,
+        'train_padded_count': train_padded_count,
+        'train_processed_count': train_processed_count,
+        'holdout_source_count': len(plan.holdout_indices),
+        'holdout_padded_count': 0,
+        'holdout_processed_count': 0,
+    }
+    metadata_path = os.path.join(args.save_dir, f'{args.save_weight}_{lm_config.hidden_size}_metadata.json')
+    with open(metadata_path, 'w', encoding='utf-8') as metadata_file:
+        json.dump(metadata, metadata_file, ensure_ascii=True, indent=2)
     
     # ========== 9. 清理分布进程 ==========
     if dist.is_initialized():

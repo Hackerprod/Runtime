@@ -6,7 +6,7 @@ import random
 from datasets import load_dataset, Features, Sequence, Value
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-def pre_processing_chat(conversations, add_system_ratio=0.2):
+def pre_processing_chat(conversations, add_system_ratio=0.2, rng=None):
     # tool use 数据完整保留不做处理
     if any(conv.get('tools') for conv in conversations): return conversations
 
@@ -23,16 +23,22 @@ def pre_processing_chat(conversations, add_system_ratio=0.2):
         "You are minimind, a small but useful language model."
     ]
     # 概率性添加system
+    rng = random if rng is None else rng
     if conversations[0].get('role') != 'system':
-        if random.random() < add_system_ratio:
-            return [{'role': 'system', 'content': random.choice(SYSTEM_PROMPTS)}] + conversations
+        if rng.random() < add_system_ratio:
+            return [{'role': 'system', 'content': rng.choice(SYSTEM_PROMPTS)}] + conversations
     return conversations
 
-def post_processing_chat(prompt_content, empty_think_ratio=0.2):
+def post_processing_chat(prompt_content, empty_think_ratio=0.2, rng=None):
     # 以80%概率移除空思考标签
-    if '<think>\n\n</think>\n\n' in prompt_content and random.random() > empty_think_ratio:
+    rng = random if rng is None else rng
+    if '<think>\n\n</think>\n\n' in prompt_content and rng.random() > empty_think_ratio:
         prompt_content = prompt_content.replace('<think>\n\n</think>\n\n', '')
     return prompt_content
+
+
+def rng_for_index(base_seed, index):
+    return random.Random(int(base_seed) + int(index))
 
 class PretrainDataset(Dataset):
     def __init__(self, data_path, tokenizer, max_length=512):
@@ -56,10 +62,11 @@ class PretrainDataset(Dataset):
 
 
 class SFTDataset(Dataset):
-    def __init__(self, jsonl_path, tokenizer, max_length=1024):
+    def __init__(self, jsonl_path, tokenizer, max_length=1024, seed=42):
         super().__init__()
         self.tokenizer = tokenizer
         self.max_length = max_length
+        self.seed = int(seed)
         features = Features({'conversations': [{'role': Value('string'), 'content': Value('string'), 'reasoning_content': Value('string'), 'tools': Value('string'), 'tool_calls': Value('string')}]})
         self.samples = load_dataset('json', data_files=jsonl_path, split='train', features=features)
         self.bos_id = tokenizer(f'{tokenizer.bos_token}assistant\n', add_special_tokens=False).input_ids
@@ -105,9 +112,10 @@ class SFTDataset(Dataset):
 
     def __getitem__(self, index):
         sample = self.samples[index]
-        conversations = pre_processing_chat(sample['conversations'])
+        rng = rng_for_index(self.seed, index)
+        conversations = pre_processing_chat(sample['conversations'], rng=rng)
         prompt = self.create_chat_prompt(conversations)
-        prompt = post_processing_chat(prompt)
+        prompt = post_processing_chat(prompt, rng=rng)
         input_ids = self.tokenizer(prompt).input_ids[:self.max_length]
         input_ids += [self.tokenizer.pad_token_id] * (self.max_length - len(input_ids))
         labels = self.generate_labels(input_ids)

@@ -18,3 +18,9 @@ python native_cpu/benchmarks/cpu-e8/benchmark.py --out native_cpu/benchmarks/cpu
 ```
 
 The raw JSON receipts and `RESULTS.md` are generated under `results/`.
+
+The recorded CPU-E8 trial is **rejected for production**: CPU-E6 remains the
+only runtime baseline because the candidate regressed the long forced decode,
+canonical output throughput, and the repetitive workload. The implementation
+commit is retained in Git only as the auditable experiment; it is not part of
+the current production runtime.

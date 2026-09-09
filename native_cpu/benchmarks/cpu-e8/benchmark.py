@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
-import os
 import statistics
 import subprocess
 import sys
@@ -14,6 +13,8 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 MODEL = ROOT / "native_cpu" / "artifacts" / "minimind-fp32.bin"
 TOKENIZER = ROOT / "checkpoints" / "minimind-3-hf"
 BASELINE = ROOT / "native_cpu" / "benchmarks" / "cpu-e6" / "baseline" / "minimind_cpu.dll"

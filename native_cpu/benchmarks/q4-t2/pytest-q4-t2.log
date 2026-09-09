@@ -1,0 +1,8 @@
+.................ss                                                      [100%]
+============================== warnings summary ===============================
+C:\Users\danil\AppData\Roaming\Python\Python314\site-packages\_pytest\cacheprovider.py:475
+  C:\Users\danil\AppData\Roaming\Python\Python314\site-packages\_pytest\cacheprovider.py:475: PytestCacheWarning: could not create cache path D:\Install\Dev\Projects\IA\Multi MoE\minimind\.pytest_cache\v\cache\nodeids: [WinError 5] Acceso denegado: 'D:\\Install\\Dev\\Projects\\IA\\Multi MoE\\minimind\\pytest-cache-files-8qpwjbth'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+17 passed, 2 skipped, 1 warning in 12.77s

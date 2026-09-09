@@ -131,6 +131,7 @@ def build_session(args):
         args.ffn_row4 = bool(getattr(runtime, "ffn_row4", False))
         args.ffn_f16_storage = bool(getattr(runtime, "ffn_f16_storage", False))
         args.attention_f16_storage = bool(getattr(runtime, "attention_f16_storage", False))
+        args.lm_head_f16_storage = bool(getattr(runtime, "lm_head_f16_storage", False))
         args.gqa_k_shared = bool(getattr(runtime, "gqa_k_shared", False))
         args.gqa_v_shared = bool(getattr(runtime, "gqa_v_shared", False))
         counted = CountedRuntime(runtime)
@@ -186,6 +187,9 @@ def response_metrics(args, result, counted, loading_seconds):
             "ffn_f16_prepare_ns": getattr(counted, "ffn_f16_prepare_ns", None),
             "attention_f16_storage_bytes": getattr(counted, "attention_f16_storage_bytes", None),
             "attention_f16_prepare_ns": getattr(counted, "attention_f16_prepare_ns", None),
+            "lm_head_f16_storage": bool(getattr(args, "lm_head_f16_storage", False)),
+            "lm_head_f16_storage_bytes": getattr(counted, "lm_head_f16_storage_bytes", None),
+            "lm_head_f16_prepare_ns": getattr(counted, "lm_head_f16_prepare_ns", None),
             "gqa_k_shared": bool(getattr(args, "gqa_k_shared", False)),
             "gqa_v_shared": bool(getattr(args, "gqa_v_shared", False)),
             # The public rate is output throughput: every generated token counts,

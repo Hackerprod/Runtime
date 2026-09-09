@@ -336,12 +336,14 @@ struct Runtime {
     std::uint64_t gqa_v_shared_fallbacks = 0;
     std::uint64_t ffn_f16_prepare_ns = 0;
     std::uint64_t attention_f16_prepare_ns = 0;
+    std::uint64_t lm_head_f16_prepare_ns = 0;
     bool profile_enabled = false;
     bool selective_logits = false;
     bool v_blocked_attention = false;
     bool ffn_row4 = false;
     bool ffn_f16_storage = false;
     bool attention_f16_storage = false;
+    bool lm_head_f16_storage = false;
     bool gqa_k_shared = false;
     bool gqa_v_shared = false;
     bool logits_valid = false;
@@ -421,6 +423,10 @@ struct Runtime {
         return prepare_f16_storage(attention_f16_weights());
     }
 
+    bool prepare_lm_head_f16_storage() {
+        return prepare_f16_storage({&tensor("model.embed_tokens.weight")});
+    }
+
     bool is_production_model() const {
         // The consolidated route is intentionally tied to the validated MiniMind
         // checkpoint shape. Synthetic fixtures and alternate model layouts retain
@@ -449,6 +455,12 @@ struct Runtime {
             if (layer.o_proj != nullptr) values += layer.o_proj->f16.size();
         }
         return values * sizeof(std::uint16_t);
+    }
+
+    std::uint64_t lm_head_f16_storage_bytes() const {
+        const auto it = tensors.find("model.embed_tokens.weight");
+        if (it == tensors.end()) return 0;
+        return static_cast<std::uint64_t>(it->second.f16.size() * sizeof(std::uint16_t));
     }
 
     Runtime(Config c, std::unordered_map<std::string, Tensor> t, uint32_t context, int mode)
@@ -525,6 +537,13 @@ struct Runtime {
             attention_f16_prepare_ns = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - attention_started).count());
             attention_f16_storage = true;
+            const auto lm_head_started = std::chrono::steady_clock::now();
+            if (!prepare_lm_head_f16_storage()) {
+                throw std::runtime_error("CPU-E8 production route requires exact FP16 LM-head storage and F16C");
+            }
+            lm_head_f16_prepare_ns = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - lm_head_started).count());
+            lm_head_f16_storage = true;
             for (PrefillState& state : prefill_states) state.resize(config, max_context);
             prefill_x4_ready = true;
         }
@@ -562,9 +581,11 @@ struct Runtime {
         const uint32_t cols = static_cast<uint32_t>(weight.cols());
         const auto started = profile_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         const bool attention_op = op == ProfileOp::Qkv || op == ProfileOp::Output;
-        const bool use_compact = weight.dtype == 0 && use_ffn_f16 &&
-            ((attention_op && attention_f16_storage) ||
-             (!attention_op && ffn_f16_storage)) &&
+        const bool vocab_op = op == ProfileOp::Vocab;
+        const bool use_compact = weight.dtype == 0 &&
+            ((vocab_op && lm_head_f16_storage) ||
+             (attention_op && use_ffn_f16 && attention_f16_storage) ||
+             (!attention_op && !vocab_op && use_ffn_f16 && ffn_f16_storage)) &&
             weight.f16.size() == weight.f32.size();
         if (use_compact) parallel.gemv_f16(weight.f16.data(), input, output, rows, cols, kernel_mode);
         else if (weight.dtype == 0 && use_ffn_row4 && ffn_row4) parallel.gemv_f32_row4(weight.f32.data(), input, output, rows, cols, kernel_mode);
@@ -635,9 +656,11 @@ struct Runtime {
         const uint32_t rows = static_cast<uint32_t>(weight.rows());
         const uint32_t cols = static_cast<uint32_t>(weight.cols());
         const bool attention_op = op == ProfileOp::Qkv || op == ProfileOp::Output;
+        const bool vocab_op = op == ProfileOp::Vocab;
         const bool use_compact = weight.dtype == 0 &&
-            ((attention_op && attention_f16_storage) ||
-             (!attention_op && ffn_f16_storage)) &&
+            ((vocab_op && lm_head_f16_storage) ||
+             (attention_op && attention_f16_storage) ||
+             (!attention_op && !vocab_op && ffn_f16_storage)) &&
             weight.f16.size() == weight.f32.size();
         if (!use_compact) {
             const bool use_row4 = op == ProfileOp::Ffn;
@@ -657,6 +680,7 @@ struct Runtime {
             case ProfileOp::Qkv: stats.qkv_calls += 4; stats.qkv_ns += ns; break;
             case ProfileOp::Output: stats.output_projection_calls += 4; stats.output_projection_ns += ns; break;
             case ProfileOp::Ffn: stats.ffn_calls += 4; stats.ffn_ns += ns; break;
+            case ProfileOp::Vocab: stats.vocab_head_calls += 4; stats.vocab_head_ns += ns; break;
             default: stats.remaining_ops_calls += 4; stats.remaining_ops_ns += ns; break;
             }
         }
@@ -865,15 +889,23 @@ struct Runtime {
         }
     }
 
-    void finalize_prefill_state(PrefillState& state, bool emit_logits, bool copy_logits) {
+    void normalize_prefill_state(PrefillState& state) {
         rms_norm(state.hidden, tensor("model.norm.weight"), config.rms_eps, state.normed);
         for (float value : state.normed) if (!std::isfinite(value)) throw std::runtime_error("non-finite hidden state");
-        if (!emit_logits) return;
+    }
+
+    void emit_prefill_logits(PrefillState& state, bool copy_logits) {
         ++stats.lm_head_calls;
         gemv(tensor("model.embed_tokens.weight"), state.normed.data(), state.logits.data(), ProfileOp::Vocab);
         for (float value : state.logits) if (!std::isfinite(value)) throw std::runtime_error("non-finite logits");
         if (copy_logits) std::copy(state.logits.begin(), state.logits.end(), logits.begin());
         logits_valid = true;
+    }
+
+    void finalize_prefill_state(PrefillState& state, bool emit_logits, bool copy_logits) {
+        normalize_prefill_state(state);
+        if (!emit_logits) return;
+        emit_prefill_logits(state, copy_logits);
     }
 
     void prefill_x4(const int32_t* tokens, bool emit_last, bool emit_all = false) {
@@ -922,9 +954,25 @@ struct Runtime {
             }
             finish_prefill_ffn_x4(prefill_states[0], prefill_states[1], prefill_states[2], prefill_states[3], w);
         }
-        for (size_t lane = 0; lane < 4; ++lane) {
-            const bool emit = emit_all || !selective_logits || (emit_last && lane == 3);
-            finalize_prefill_state(prefill_states[lane], emit, lane == 3);
+        if (emit_all) {
+            for (PrefillState& state : prefill_states) normalize_prefill_state(state);
+            stats.lm_head_calls += 4;
+            gemv_x4(tensor("model.embed_tokens.weight"),
+                    prefill_states[0].normed.data(), prefill_states[0].logits.data(),
+                    prefill_states[1].normed.data(), prefill_states[1].logits.data(),
+                    prefill_states[2].normed.data(), prefill_states[2].logits.data(),
+                    prefill_states[3].normed.data(), prefill_states[3].logits.data(),
+                    ProfileOp::Vocab);
+            for (PrefillState& state : prefill_states) {
+                for (float value : state.logits) if (!std::isfinite(value)) throw std::runtime_error("non-finite logits");
+            }
+            std::copy(prefill_states[3].logits.begin(), prefill_states[3].logits.end(), logits.begin());
+            logits_valid = true;
+        } else {
+            for (size_t lane = 0; lane < 4; ++lane) {
+                const bool emit = !selective_logits || (emit_last && lane == 3);
+                finalize_prefill_state(prefill_states[lane], emit, lane == 3);
+            }
         }
         position += 4;
     }
@@ -1401,6 +1449,28 @@ MM_RUNTIME_API int mm_get_attention_f16_prepare_ns(void* runtime, uint64_t* out_
         Runtime* model = checked_runtime(runtime);
         if (out_ns == nullptr) return -1;
         *out_ns = model->attention_f16_prepare_ns;
+        return 0;
+    } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_lm_head_f16_storage(void* runtime) {
+    try { return checked_runtime(runtime)->lm_head_f16_storage ? 1 : 0; } catch (...) { return 0; }
+}
+
+MM_RUNTIME_API int mm_get_lm_head_f16_storage_bytes(void* runtime, uint64_t* out_bytes) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (out_bytes == nullptr) return -1;
+        *out_bytes = model->lm_head_f16_storage_bytes();
+        return 0;
+    } catch (...) { return -1; }
+}
+
+MM_RUNTIME_API int mm_get_lm_head_f16_prepare_ns(void* runtime, uint64_t* out_ns) {
+    try {
+        Runtime* model = checked_runtime(runtime);
+        if (out_ns == nullptr) return -1;
+        *out_ns = model->lm_head_f16_prepare_ns;
         return 0;
     } catch (...) { return -1; }
 }

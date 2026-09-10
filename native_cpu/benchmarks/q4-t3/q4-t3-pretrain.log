@@ -1,0 +1,35 @@
+Model Params: 63.91M
+Trainable Params: 63.912M
+Epoch:[1<redacted-path>, loss: 6.8843, logits_loss: 6.8843, aux_loss: 0.0000, lr: 0.00050000, epoch_time: 80.0min
+Epoch:[1<redacted-path>, loss: 6.4337, logits_loss: 6.4337, aux_loss: 0.0000, lr: 0.00049999, epoch_time: 71.0min
+Epoch:[1<redacted-path>, loss: 5.7369, logits_loss: 5.7369, aux_loss: 0.0000, lr: 0.00049998, epoch_time: 68.0min
+Epoch:[1<redacted-path>, loss: 5.4435, logits_loss: 5.4435, aux_loss: 0.0000, lr: 0.00049997, epoch_time: 67.0min
+Epoch:[1<redacted-path>, loss: 5.1509, logits_loss: 5.1509, aux_loss: 0.0000, lr: 0.00049996, epoch_time: 66.0min
+Epoch:[1<redacted-path>, loss: 5.0992, logits_loss: 5.0992, aux_loss: 0.0000, lr: 0.00049994, epoch_time: 65.0min
+Epoch:[1<redacted-path>, loss: 4.7448, logits_loss: 4.7448, aux_loss: 0.0000, lr: 0.00049991, epoch_time: 65.0min
+Epoch:[1<redacted-path>, loss: 4.4285, logits_loss: 4.4285, aux_loss: 0.0000, lr: 0.00049989, epoch_time: 64.0min
+Epoch:[1<redacted-path>, loss: 4.5077, logits_loss: 4.5077, aux_loss: 0.0000, lr: 0.00049986, epoch_time: 64.0min
+Epoch:[1<redacted-path>, loss: 4.0237, logits_loss: 4.0237, aux_loss: 0.0000, lr: 0.00049982, epoch_time: 64.0min
+Epoch:[1<redacted-path>, loss: 3.9957, logits_loss: 3.9957, aux_loss: 0.0000, lr: 0.00049979, epoch_time: 65.0min
+Epoch:[1<redacted-path>, loss: 4.1233, logits_loss: 4.1233, aux_loss: 0.0000, lr: 0.00049975, epoch_time: 64.0min
+Epoch:[1<redacted-path>, loss: 4.4090, logits_loss: 4.4090, aux_loss: 0.0000, lr: 0.00049970, epoch_time: 64.0min
+Epoch:[1<redacted-path>, loss: 3.8702, logits_loss: 3.8702, aux_loss: 0.0000, lr: 0.00049965, epoch_time: 64.0min
+Epoch:[1<redacted-path>, loss: 3.6817, logits_loss: 3.6817, aux_loss: 0.0000, lr: 0.00049960, epoch_time: 64.0min
+... (truncated) ...
+Epoch:[1<redacted-path>, loss: 1.9916, logits_loss: 1.9916, aux_loss: 0.0000, lr: 0.00005034, epoch_time: 1.0min
+Epoch:[1<redacted-path>, loss: 1.9413, logits_loss: 1.9413, aux_loss: 0.0000, lr: 0.00005029, epoch_time: 1.0min
+Epoch:[1<redacted-path>, loss: 1.9312, logits_loss: 1.9312, aux_loss: 0.0000, lr: 0.00005025, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.7698, logits_loss: 1.7698, aux_loss: 0.0000, lr: 0.00005021, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 2.1768, logits_loss: 2.1768, aux_loss: 0.0000, lr: 0.00005017, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.8303, logits_loss: 1.8303, aux_loss: 0.0000, lr: 0.00005014, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.9664, logits_loss: 1.9664, aux_loss: 0.0000, lr: 0.00005011, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 2.0255, logits_loss: 2.0255, aux_loss: 0.0000, lr: 0.00005008, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.9218, logits_loss: 1.9218, aux_loss: 0.0000, lr: 0.00005006, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.9023, logits_loss: 1.9023, aux_loss: 0.0000, lr: 0.00005004, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.9558, logits_loss: 1.9558, aux_loss: 0.0000, lr: 0.00005003, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 2.2011, logits_loss: 2.2011, aux_loss: 0.0000, lr: 0.00005001, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 2.0086, logits_loss: 2.0086, aux_loss: 0.0000, lr: 0.00005001, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.8085, logits_loss: 1.8085, aux_loss: 0.0000, lr: 0.00005000, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.7408, logits_loss: 1.7408, aux_loss: 0.0000, lr: 0.00005000, epoch_time: 0.0min
+Model Params: 63.91M
+Trainable Params: 63.912M

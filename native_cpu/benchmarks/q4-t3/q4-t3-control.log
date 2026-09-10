@@ -1,0 +1,35 @@
+index plan SHA-256: cc1b55c433d91513d448ebaf0ebd6e0fde32ec1525a5c93247cc4eb93ed03986
+holdout SHA-256: 3b41114d8033dc1087d0b789848ce9f0050ef8c0ddb53d6b312f5c68a5630d34 (128 indices)
+Epoch:[1<redacted-path>, loss: 2.1718, logits_loss: 2.1718, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 54.0min
+Epoch:[1<redacted-path>, loss: 2.2522, logits_loss: 2.2522, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 49.0min
+Epoch:[1<redacted-path>, loss: 2.0942, logits_loss: 2.0942, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 48.0min
+Epoch:[1<redacted-path>, loss: 2.2387, logits_loss: 2.2387, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 47.0min
+Epoch:[1<redacted-path>, loss: 1.8945, logits_loss: 1.8945, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 46.0min
+Epoch:[1<redacted-path>, loss: 1.9569, logits_loss: 1.9569, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 46.0min
+Epoch:[1<redacted-path>, loss: 1.9178, logits_loss: 1.9178, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 46.0min
+Epoch:[1<redacted-path>, loss: 1.9416, logits_loss: 1.9416, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 45.0min
+Epoch:[1<redacted-path>, loss: 1.8388, logits_loss: 1.8388, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 45.0min
+Epoch:[1<redacted-path>, loss: 1.9885, logits_loss: 1.9885, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 45.0min
+Epoch:[1<redacted-path>, loss: 2.0876, logits_loss: 2.0876, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 46.0min
+Epoch:[1<redacted-path>, loss: 2.0604, logits_loss: 2.0604, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 45.0min
+Epoch:[1<redacted-path>, loss: 1.9459, logits_loss: 1.9459, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 45.0min
+Epoch:[1<redacted-path>, loss: 1.8584, logits_loss: 1.8584, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 45.0min
+Epoch:[1<redacted-path>, loss: 1.7452, logits_loss: 1.7452, aux_loss: 0.0000, lr: 0.00000998, epoch_time: 45.0min
+... (truncated) ...
+Epoch:[1<redacted-path>, loss: 1.8177, logits_loss: 1.8177, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 1.0min
+Epoch:[1<redacted-path>, loss: 1.7990, logits_loss: 1.7990, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 1.0min
+Epoch:[1<redacted-path>, loss: 1.7564, logits_loss: 1.7564, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.7431, logits_loss: 1.7431, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.7086, logits_loss: 1.7086, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.8788, logits_loss: 1.8788, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.6132, logits_loss: 1.6132, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.5727, logits_loss: 1.5727, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.7172, logits_loss: 1.7172, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.4317, logits_loss: 1.4317, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.7047, logits_loss: 1.7047, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.8189, logits_loss: 1.8189, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.9215, logits_loss: 1.9215, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.6680, logits_loss: 1.6680, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.0min
+Epoch:[1<redacted-path>, loss: 1.6846, logits_loss: 1.6846, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.0min
+index plan SHA-256: cc1b55c433d91513d448ebaf0ebd6e0fde32ec1525a5c93247cc4eb93ed03986
+holdout SHA-256: 3b41114d8033dc1087d0b789848ce9f0050ef8c0ddb53d6b312f5c68a5630d34 (128 indices)

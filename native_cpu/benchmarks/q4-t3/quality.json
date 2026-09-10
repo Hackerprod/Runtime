@@ -1,0 +1,1 @@
+{"classification":"PASS candidate","control_ppl":5.39637787453214,"qat_ppl":5.411454031480577,"relative_degradation":0.27937548664980216,"schema":"q4-t3-quality","schema_version":1,"threshold_version":"q4-t3-quality-thresholds-v1"}

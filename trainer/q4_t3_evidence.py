@@ -339,9 +339,17 @@ def _validate_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
         raise EvidenceError("SPEC-Q4 tensor parity details are incomplete or failed")
     expected_shapes_by_name = expected_qat_dense_shapes()
     expected_shapes = sorted(expected_shapes_by_name.values())
+    expected_by_identity: dict[tuple[int, str], tuple[int, ...]] = {}
+    for _logical_name, _logical_shape in expected_shapes_by_name.items():
+        _parts = _logical_name.split(".")
+        expected_by_identity[(int(_parts[1]), _parts[3])] = tuple(_logical_shape)
+    tensor_identity_re = re.compile(
+        r"(?:^|\.)layers?\.(?P<layer>[0-9]+)\.mlp\.(?P<projection>gate_proj|up_proj|down_proj)\.weight$"
+    )
     actual_shapes: list[tuple[int, ...]] = []
     normalized_tensors: list[dict[str, Any]] = []
     seen_names: set[str] = set()
+    seen_identities: set[tuple[int, str]] = set()
     for tensor in tensors:
         if not isinstance(tensor, Mapping) or tensor.get("parity_status") != "PASS":
             raise EvidenceError("SPEC-Q4 tensor parity details are incomplete or failed")
@@ -352,8 +360,13 @@ def _validate_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(shape_value, (list, tuple)) or any(not isinstance(dimension, int) or isinstance(dimension, bool) or dimension <= 0 for dimension in shape_value):
             raise EvidenceError(f"SPEC-Q4 tensor shape is invalid: {name}")
         shape = tuple(shape_value)
-        if name not in expected_shapes_by_name or shape != expected_shapes_by_name[name]:
+        identity_match = tensor_identity_re.search(name)
+        if identity_match is None:
+            raise EvidenceError(f"SPEC-Q4 tensor name is not a dense MiniMind FFN key: {name}")
+        identity = (int(identity_match.group("layer")), identity_match.group("projection"))
+        if identity in seen_identities or identity not in expected_by_identity or shape != expected_by_identity[identity]:
             raise EvidenceError(f"SPEC-Q4 tensor shape does not match dense MiniMind contract: {name}")
+        seen_identities.add(identity)
         actual_shapes.append(shape)
         tensor_storage = compute_spec_q4_storage({name: shape})
         if tensor.get("weight_count") != tensor_storage["weight_count"]:
@@ -367,7 +380,7 @@ def _validate_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
         seen_names.add(name)
     if sorted(actual_shapes) != expected_shapes:
         raise EvidenceError("SPEC-Q4 tensor shapes do not match full dense MiniMind contract")
-    if seen_names != set(expected_shapes_by_name):
+    if seen_identities != set(expected_by_identity):
         raise EvidenceError("SPEC-Q4 tensor names do not match full dense MiniMind contract")
     normalized_spec = dict(spec)
     normalized_spec["storage"] = dict(expected)

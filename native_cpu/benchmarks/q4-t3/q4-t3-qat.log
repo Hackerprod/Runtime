@@ -1,0 +1,47 @@
+QAT RERUN START 2026-09-10T11:06:04Z
+SPEC-Q4 QAT targets: 24 tensors, 44826624 weights
+Generating train split: 0 examples [00:00, ? examples<redacted-path>
+Generating train split: 3681 examples [00:00, 26511.04 examples<redacted-path>
+Generating train split: 11030 examples [00:00, 40032.62 examples<redacted-path>
+Generating train split: 22008 examples [00:00, 55451.04 examples<redacted-path>
+Generating train split: 36681 examples [00:00, 78681.38 examples<redacted-path>
+Generating train split: 51321 examples [00:00, 89879.54 examples<redacted-path>
+Epoch:[1<redacted-path>, loss: 2.1794, logits_loss: 2.1794, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 86.2min
+Epoch:[1<redacted-path>, loss: 2.2601, logits_loss: 2.2601, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 80.9min
+Epoch:[1<redacted-path>, loss: 2.1019, logits_loss: 2.1019, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 79.0min
+Epoch:[1<redacted-path>, loss: 2.2466, logits_loss: 2.2466, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 77.9min
+Epoch:[1<redacted-path>, loss: 1.9004, logits_loss: 1.9004, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 77.3min
+Epoch:[1<redacted-path>, loss: 1.9660, logits_loss: 1.9660, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 76.7min
+Epoch:[1<redacted-path>, loss: 1.9241, logits_loss: 1.9241, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 76.3min
+Epoch:[1<redacted-path>, loss: 1.9491, logits_loss: 1.9491, aux_loss: 0.0000, lr: 0.00001000, epoch_time: 75.9min
+Epoch:[1<redacted-path>, loss: 1.8448, logits_loss: 1.8448, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 75.6min
+Epoch:[1<redacted-path>, loss: 1.9942, logits_loss: 1.9942, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 75.4min
+Epoch:[1<redacted-path>, loss: 2.0916, logits_loss: 2.0916, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 75.1min
+Epoch:[1<redacted-path>, loss: 2.0693, logits_loss: 2.0693, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 74.8min
+Epoch:[1<redacted-path>, loss: 1.9523, logits_loss: 1.9523, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 74.6min
+Epoch:[1<redacted-path>, loss: 1.8636, logits_loss: 1.8636, aux_loss: 0.0000, lr: 0.00000999, epoch_time: 74.4min
+Epoch:[1<redacted-path>, loss: 1.7515, logits_loss: 1.7515, aux_loss: 0.0000, lr: 0.00000998, epoch_time: 74.3min
+... (truncated) ...
+Epoch:[1<redacted-path>, loss: 1.8228, logits_loss: 1.8228, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 1.9min
+Epoch:[1<redacted-path>, loss: 1.8008, logits_loss: 1.8008, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 1.7min
+Epoch:[1<redacted-path>, loss: 1.7559, logits_loss: 1.7559, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 1.6min
+Epoch:[1<redacted-path>, loss: 1.7465, logits_loss: 1.7465, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 1.5min
+Epoch:[1<redacted-path>, loss: 1.7098, logits_loss: 1.7098, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 1.3min
+Epoch:[1<redacted-path>, loss: 1.8790, logits_loss: 1.8790, aux_loss: 0.0000, lr: 0.00000101, epoch_time: 1.2min
+Epoch:[1<redacted-path>, loss: 1.6138, logits_loss: 1.6138, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 1.1min
+Epoch:[1<redacted-path>, loss: 1.5756, logits_loss: 1.5756, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.9min
+Epoch:[1<redacted-path>, loss: 1.7193, logits_loss: 1.7193, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.8min
+Epoch:[1<redacted-path>, loss: 1.4330, logits_loss: 1.4330, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.7min
+Epoch:[1<redacted-path>, loss: 1.7066, logits_loss: 1.7066, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.5min
+Epoch:[1<redacted-path>, loss: 1.8212, logits_loss: 1.8212, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.4min
+Epoch:[1<redacted-path>, loss: 1.9238, logits_loss: 1.9238, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.3min
+Epoch:[1<redacted-path>, loss: 1.6701, logits_loss: 1.6701, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.1min
+Epoch:[1<redacted-path>, loss: 1.6895, logits_loss: 1.6895, aux_loss: 0.0000, lr: 0.00000100, epoch_time: 0.0min
+Generating train split: 804661 examples [00:04, 182119.95 examples<redacted-path>
+Generating train split: 841445 examples [00:05, 194979.41 examples<redacted-path>
+Generating train split: 871300 examples [00:05, 206490.20 examples<redacted-path>
+Generating train split: 905718 examples [00:05, 219997.71 examples<redacted-path>
+Generating train split: 905718 examples [00:05, 171519.80 examples<redacted-path>
+index plan SHA-256: cc1b55c433d91513d448ebaf0ebd6e0fde32ec1525a5c93247cc4eb93ed03986
+holdout SHA-256: 3b41114d8033dc1087d0b789848ce9f0050ef8c0ddb53d6b312f5c68a5630d34 (128 indices)
+QAT RERUN RC=0 2026-09-10T12:22:06Z

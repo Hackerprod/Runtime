@@ -660,6 +660,7 @@ def _compact_metrics(metrics: Mapping[str, Any] | None) -> dict[str, Any] | None
     return {
         key: metrics.get(key)
         for key in (
+            "stage",
             "status", "training_failed", "finite_loss", "finite_gradients",
             "optimizer_steps", "duration_seconds", "tokens_per_second", "median_step_ms",
             "samples_processed", "tokens_processed", "peak_allocated_vram_bytes",

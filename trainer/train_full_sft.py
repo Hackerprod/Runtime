@@ -19,9 +19,15 @@ from model.model_minimind import MiniMindConfig, MiniMindForCausalLM
 from dataset.lm_dataset import SFTDataset
 from trainer.trainer_utils import get_lr, Logger, is_main_process, lm_checkpoint, init_distributed_mode, setup_seed, init_model
 from trainer.sft_plan import build_deterministic_sft_loader, build_sft_index_plan
+from trainer.q4_t3_metrics import (
+    MetricsCollector,
+    check_finite_gradient_norm,
+    check_finite_loss,
+)
 
 warnings.filterwarnings('ignore')
 
+metrics = None
 
 def _init_q4_t3_control_model(lm_config, parent_path, device, tokenizer_path='../model'):
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
@@ -32,6 +38,8 @@ def _init_q4_t3_control_model(lm_config, parent_path, device, tokenizer_path='..
 
 
 def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
+    if metrics:
+        metrics.start(args.epochs * iters)
     start_time = time.time()
     last_step = start_step
     for step, (input_ids, labels) in enumerate(loader, start=start_step + 1):
@@ -42,25 +50,40 @@ def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
+        batch_started = time.perf_counter()
         with autocast_ctx:
             res = model(input_ids, labels=labels)
             loss = res.loss + res.aux_loss
+            check_finite_loss(loss, stage="control", collector=metrics)
             loss = loss / args.accumulation_steps
 
         scaler.scale(loss).backward()
+        current_loss = None
+        if metrics or step % args.log_interval == 0 or step == iters:
+            current_loss = loss.item() * args.accumulation_steps
+        if metrics:
+            metrics.record_batch(
+                current_loss,
+                labels=labels,
+                duration_seconds=time.perf_counter() - batch_started,
+            )
 
         if step % args.accumulation_steps == 0:
             scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+            check_finite_gradient_norm(grad_norm, stage="control", collector=metrics)
+            if metrics:
+                metrics.record_gradient_norm(grad_norm)
 
             scaler.step(optimizer)
             scaler.update()
+            if metrics:
+                metrics.record_optimizer_step()
 
             optimizer.zero_grad(set_to_none=True)
 
         if step % args.log_interval == 0 or step == iters:
             spend_time = time.time() - start_time
-            current_loss = loss.item() * args.accumulation_steps
             current_aux_loss = res.aux_loss.item() if res.aux_loss is not None else 0.0
             current_logits_loss = current_loss - current_aux_loss
             current_lr = optimizer.param_groups[-1]['lr']
@@ -86,9 +109,14 @@ def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
 
     if last_step > start_step and last_step % args.accumulation_steps != 0:
         scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+        check_finite_gradient_norm(grad_norm, stage="control", collector=metrics)
+        if metrics:
+            metrics.record_gradient_norm(grad_norm)
         scaler.step(optimizer)
         scaler.update()
+        if metrics:
+            metrics.record_optimizer_step()
         optimizer.zero_grad(set_to_none=True)
 
 
@@ -118,16 +146,27 @@ if __name__ == "__main__":
     parser.add_argument('--from_weight', default='pretrain', type=str, help="基于哪个权重训练，为none则不基于任何权重训练")
     parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb")
+    parser.add_argument("--metrics_path", type=str, default=None, help="可选的紧凑训练指标JSON路径")
     parser.add_argument('--expected_plan_sha256', default=None, type=str, help="可选的预期index plan SHA-256")
     parser.add_argument('--expected_holdout_sha256', default=None, type=str, help="可选的预期holdout SHA-256")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-Full-SFT", help="wandb项目名")
     parser.add_argument("--use_compile", default=0, type=int, choices=[0, 1], help="是否使用torch.compile加速（0=否，1=是）")
     args = parser.parse_args()
-
     # ========== 1. 初始化环境和随机种子 ==========
     local_rank = init_distributed_mode()
     if dist.is_initialized(): args.device = f"cuda:{local_rank}"
     setup_seed(args.seed + (dist.get_rank() if dist.is_initialized() else 0))
+    if args.metrics_path:
+        rank = dist.get_rank() if dist.is_initialized() else 0
+        metrics = MetricsCollector(
+            "control",
+            config={key: getattr(args, key) for key in (
+                "epochs", "batch_size", "learning_rate", "dtype", "num_workers",
+                "accumulation_steps", "max_seq_len", "use_moe", "seed",
+            )},
+            metrics_path=args.metrics_path,
+            rank=rank,
+        )
     
     # ========== 2. 配置目录、模型参数、检查ckp ==========
     os.makedirs(args.save_dir, exist_ok=True)
@@ -211,11 +250,16 @@ if __name__ == "__main__":
         train_source_count += loader.sft_num_source_samples
         train_padded_count += loader.sft_num_padded_samples
         train_processed_count += loader.sft_num_processed_samples
-        if skip > 0: 
-            Logger(f'Epoch [{epoch + 1}/{args.epochs}]: 跳过前{start_step}个step，从step {start_step + 1}开始')
-            train_epoch(epoch, loader, len(loader) + skip, start_step, wandb)
-        else:
-            train_epoch(epoch, loader, len(loader), 0, wandb)
+        try:
+            if skip > 0:
+                Logger(f'Epoch [{epoch + 1}/{args.epochs}]: 跳过前{start_step}个step，从step {start_step + 1}开始')
+                train_epoch(epoch, loader, len(loader) + skip, start_step, wandb)
+            else:
+                train_epoch(epoch, loader, len(loader), 0, wandb)
+        except Exception:
+            if metrics and is_main_process():
+                metrics.finish(extra={"training_failed": True})
+            raise
 
     metadata = {
         'trainer': 'control',
@@ -230,6 +274,10 @@ if __name__ == "__main__":
     metadata_path = os.path.join(args.save_dir, f'{args.save_weight}_{lm_config.hidden_size}_metadata.json')
     with open(metadata_path, 'w', encoding='utf-8') as metadata_file:
         json.dump(metadata, metadata_file, ensure_ascii=True, indent=2)
+
+    if metrics and is_main_process():
+        metrics.stop()
+        metrics.finish()
     
     # ========== 9. 清理分布进程 ==========
     if dist.is_initialized():

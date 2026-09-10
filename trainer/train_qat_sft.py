@@ -19,12 +19,20 @@ from transformers import AutoTokenizer
 
 from dataset.lm_dataset import SFTDataset
 from model.model_minimind import MiniMindConfig, MiniMindForCausalLM
-from model.quantization.qat import QATLinear, QAT_TENSOR_COUNT, QAT_WEIGHT_COUNT, apply_spec_q4_qat
+from model.quantization.qat import QATLinear, QAT_TENSOR_COUNT, QAT_WEIGHT_COUNT, apply_spec_q4_qat, spec_q4_fake_dequant
 from trainer.sft_plan import build_deterministic_sft_loader, build_sft_index_plan
 from trainer.trainer_utils import Logger, get_lr, setup_seed
+from trainer.q4_t3_metrics import (
+    MetricsCollector,
+    check_finite_gradient_norm,
+    check_finite_loss,
+    finish_parent_delta_evidence,
+    summarize_weight_differences,
+)
 
 warnings.filterwarnings('ignore')
 
+metrics = None
 
 def _sha256_file(path):
     digest = hashlib.sha256()
@@ -48,11 +56,14 @@ def _save_fp32_state_dict(model, path):
 
 def _clip_gradients(model, max_norm):
     grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
-    if not bool(torch.isfinite(torch.as_tensor(grad_norm)).all()):
-        raise RuntimeError('non-finite gradient norm during QAT training')
+    check_finite_gradient_norm(grad_norm, stage='qat', collector=metrics)
+    if metrics:
+        metrics.record_gradient_norm(grad_norm)
 
 
 def _train_epoch(epoch, loader, iters, model, optimizer, scaler, autocast_ctx, args):
+    if metrics:
+        metrics.start(args.epochs * iters)
     start_time = time.time()
     last_step = 0
     for step, (input_ids, labels) in enumerate(loader, start=1):
@@ -63,24 +74,34 @@ def _train_epoch(epoch, loader, iters, model, optimizer, scaler, autocast_ctx, a
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
+        batch_started = time.perf_counter()
         with autocast_ctx:
             result = model(input_ids, labels=labels)
             loss = result.loss + result.aux_loss
+            check_finite_loss(loss, stage='qat', collector=metrics)
             loss = loss / args.accumulation_steps
-            if not bool(torch.isfinite(loss).all()):
-                raise RuntimeError('non-finite loss during QAT training')
 
         scaler.scale(loss).backward()
+        current_loss = None
+        if metrics or step % args.log_interval == 0 or step == iters:
+            current_loss = loss.item() * args.accumulation_steps
+        if metrics:
+            metrics.record_batch(
+                current_loss,
+                labels=labels,
+                duration_seconds=time.perf_counter() - batch_started,
+            )
         if step % args.accumulation_steps == 0:
             scaler.unscale_(optimizer)
             _clip_gradients(model, args.grad_clip)
             scaler.step(optimizer)
             scaler.update()
+            if metrics:
+                metrics.record_optimizer_step()
             optimizer.zero_grad(set_to_none=True)
 
         if step % args.log_interval == 0 or step == iters:
             elapsed = time.time() - start_time
-            current_loss = loss.item() * args.accumulation_steps
             aux_loss = result.aux_loss.item() if result.aux_loss is not None else 0.0
             Logger(
                 f'Epoch:[{epoch + 1}/{args.epochs}]({step}/{iters}), '
@@ -95,10 +116,32 @@ def _train_epoch(epoch, loader, iters, model, optimizer, scaler, autocast_ctx, a
         _clip_gradients(model, args.grad_clip)
         scaler.step(optimizer)
         scaler.update()
+        if metrics:
+            metrics.record_optimizer_step()
         optimizer.zero_grad(set_to_none=True)
 
 
+def _qat_weight_keys(model):
+    return tuple(
+        f'{name}.weight'
+        for name, module in model.named_modules()
+        if isinstance(module, QATLinear)
+    )
+
+
+def _qat_quantization_error(model, keys):
+    modules = dict(model.named_modules())
+    return summarize_weight_differences(
+        (
+            modules[key[:-len('.weight')]].weight,
+            spec_q4_fake_dequant(modules[key[:-len('.weight')]].weight),
+        )
+        for key in keys
+    )
+
+
 def main():
+    global metrics
     parser = argparse.ArgumentParser(description='MiniMind SPEC-Q4 QAT SFT')
     parser.add_argument('--save_dir', type=str, default='../out')
     parser.add_argument('--save_weight', type=str, default='qat_sft')
@@ -122,9 +165,20 @@ def main():
     parser.add_argument('--holdout_seed', type=int, default=4242)
     parser.add_argument('--holdout_size', type=int, default=128)
     parser.add_argument('--data_path', type=str, default='../dataset/sft_t2t_mini.jsonl')
+    parser.add_argument('--metrics_path', type=str, default=None)
     parser.add_argument('--expected_plan_sha256', type=str, default=None)
     parser.add_argument('--expected_holdout_sha256', type=str, default=None)
     args = parser.parse_args()
+
+    if args.metrics_path:
+        metrics = MetricsCollector(
+            'qat',
+            config={key: getattr(args, key) for key in (
+                'epochs', 'batch_size', 'learning_rate', 'dtype', 'num_workers',
+                'accumulation_steps', 'max_seq_len', 'use_moe', 'seed',
+            )},
+            metrics_path=args.metrics_path,
+        )
 
     if args.use_moe:
         raise ValueError('SPEC-Q4 QAT requires dense use_moe=0')
@@ -152,6 +206,17 @@ def main():
             f'unexpected QAT targets: tensors={qat_tensor_count}, weights={qat_weight_count}'
         )
     Logger(f'SPEC-Q4 QAT targets: {qat_tensor_count} tensors, {qat_weight_count} weights')
+
+    qat_weight_keys = _qat_weight_keys(model)
+    if len(qat_weight_keys) != QAT_TENSOR_COUNT:
+        raise RuntimeError(f'unexpected QAT weight keys: {len(qat_weight_keys)}')
+    parent_ffn_weights = {
+        key: parent_state_dict[key].detach().to(dtype=torch.float32, device='cpu').clone()
+        for key in qat_weight_keys
+    }
+    quantization_error_start = None
+    if metrics:
+        quantization_error_start = _qat_quantization_error(model, qat_weight_keys)
 
     train_ds = SFTDataset(args.data_path, tokenizer, max_length=args.max_seq_len, seed=args.seed)
     plan = build_sft_index_plan(
@@ -195,7 +260,41 @@ def main():
         train_source_count += loader.sft_num_source_samples
         train_padded_count += loader.sft_num_padded_samples
         train_processed_count += loader.sft_num_processed_samples
-        _train_epoch(epoch, loader, len(loader), model, optimizer, scaler, autocast_ctx, args)
+        try:
+            _train_epoch(epoch, loader, len(loader), model, optimizer, scaler, autocast_ctx, args)
+        except Exception:
+            if metrics:
+                metrics.finish(extra={'training_failed': True})
+            raise
+
+    if metrics:
+        training_duration = metrics.stop()
+        quantization_error_end = _qat_quantization_error(model, qat_weight_keys)
+        master_weights = {
+            key: model.state_dict()[key]
+            for key in qat_weight_keys
+        }
+        finish_parent_delta_evidence(
+            metrics,
+            master_weights,
+            parent_ffn_weights,
+            qat_weight_keys,
+            extra={
+                'quantization_error_start': quantization_error_start,
+                'quantization_error_end': quantization_error_end,
+                'slowdown_vs_control': None,
+                'memory_overhead_vs_control': None,
+                'comparison_fields_unavailable_reason': 'CONTROL baseline not supplied to trainer',
+            },
+            duration_seconds=training_duration,
+        )
+    else:
+        finish_parent_delta_evidence(
+            None,
+            {key: model.state_dict()[key] for key in qat_weight_keys},
+            parent_ffn_weights,
+            qat_weight_keys,
+        )
 
     metadata = {
         'trainer': 'qat',

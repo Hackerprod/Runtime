@@ -127,6 +127,48 @@ def summarize_parent_delta(
     return summary
 
 
+def capture_parameter_probe(model: Any, max_values: int = 64) -> tuple[float, ...]:
+    """Capture bounded deterministic boundary values from trainable parameters."""
+
+    if max_values < 1:
+        raise ValueError("parameter probe capacity must be positive")
+    values: list[float] = []
+    for parameter in model.parameters():
+        if not parameter.is_floating_point() or parameter.numel() == 0:
+            continue
+        flat = parameter.detach().to(dtype=torch.float32, device="cpu").reshape(-1)
+        indices = (0,) if flat.numel() == 1 else (0, flat.numel() - 1)
+        for index in indices:
+            values.append(float(flat[index].item()))
+            if len(values) >= max_values:
+                return tuple(values)
+    if not values:
+        raise ValueError("cannot capture empty parameter probe")
+    return tuple(values)
+
+
+def summarize_parameter_probe(
+    initial: Iterable[float],
+    final: Iterable[float],
+) -> dict[str, Any]:
+    """Summarize bounded initial/final parameter probe differences."""
+
+    initial_values = tuple(float(value) for value in initial)
+    final_values = tuple(float(value) for value in final)
+    if not initial_values or len(initial_values) != len(final_values):
+        raise ValueError("parameter probes must be non-empty and equally sized")
+    differences = [abs(left - right) for left, right in zip(initial_values, final_values)]
+    if not all(math.isfinite(value) for value in differences):
+        raise ValueError("parameter probe differences must be finite")
+    return {
+        "method": "deterministic_parameter_boundaries_v1",
+        "sample_count": len(differences),
+        "mean_abs": sum(differences) / len(differences),
+        "max_abs": max(differences),
+        "parameters_changed": max(differences) > 0.0,
+    }
+
+
 def finish_parent_delta_evidence(
     collector: "MetricsCollector | None",
     master_weights: Mapping[str, torch.Tensor],
@@ -332,7 +374,9 @@ __all__ = [
     "check_finite_gradient_norm",
     "check_finite_loss",
     "finish_parent_delta_evidence",
+    "capture_parameter_probe",
     "is_metrics_writer",
+    "summarize_parameter_probe",
     "summarize_parent_delta",
     "summarize_weight_differences",
 ]

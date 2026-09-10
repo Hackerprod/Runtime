@@ -19,20 +19,28 @@ from dataset.lm_dataset import PretrainDataset
 from trainer.trainer_utils import get_lr, Logger, is_main_process, lm_checkpoint, init_distributed_mode, setup_seed, init_model, SkipBatchSampler
 from trainer.q4_t3_metrics import (
     MetricsCollector,
+    capture_parameter_probe,
     check_finite_gradient_norm,
     check_finite_loss,
+    summarize_parameter_probe,
 )
 
 warnings.filterwarnings('ignore')
 
 metrics = None
+parameter_probe = None
 
-def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
+def train_epoch(epoch, loader, iters, start_step=0, wandb=None, max_steps=None):
     if metrics:
-        metrics.start(args.epochs * iters)
+        planned_steps = args.epochs * iters
+        metrics.start(min(planned_steps, max_steps) if max_steps is not None else planned_steps)
     start_time = time.time()
     last_step = start_step
+    processed_steps = 0
     for step, (input_ids, labels) in enumerate(loader, start=start_step + 1):
+        if max_steps is not None and processed_steps >= max_steps:
+            break
+        processed_steps += 1
         input_ids = input_ids.to(args.device)
         labels = labels.to(args.device)
         last_step = step
@@ -81,7 +89,8 @@ def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
             Logger(f'Epoch:[{epoch + 1}/{args.epochs}]({step}/{iters}), loss: {current_loss:.4f}, logits_loss: {current_logits_loss:.4f}, aux_loss: {current_aux_loss:.4f}, lr: {current_lr:.8f}, epoch_time: {eta_min:.1f}min')
             if wandb: wandb.log({"loss": current_loss, "logits_loss": current_logits_loss, "aux_loss": current_aux_loss, "learning_rate": current_lr, "epoch_time": eta_min})
 
-        if (step % args.save_interval == 0 or step == iters) and is_main_process():
+        truncated = max_steps is not None and processed_steps == max_steps
+        if (step % args.save_interval == 0 or step == iters) and not truncated and is_main_process():
             model.eval()
             moe_suffix = '_moe' if lm_config.use_moe else ''
             ckp = f'{args.save_dir}/{args.save_weight}_{lm_config.hidden_size}{moe_suffix}.pth'
@@ -107,6 +116,20 @@ def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
             metrics.record_optimizer_step()
         optimizer.zero_grad(set_to_none=True)
 
+    truncated = max_steps is not None and processed_steps >= max_steps
+    if truncated and is_main_process():
+        model.eval()
+        moe_suffix = '_moe' if lm_config.use_moe else ''
+        ckp = f'{args.save_dir}/{args.save_weight}_{lm_config.hidden_size}{moe_suffix}.pth'
+        raw_model = model.module if isinstance(model, DistributedDataParallel) else model
+        raw_model = getattr(raw_model, '_orig_mod', raw_model)
+        state_dict = raw_model.state_dict()
+        torch.save({k: v.half().cpu() for k, v in state_dict.items()}, ckp)
+        lm_checkpoint(lm_config, weight=args.save_weight, model=model, optimizer=optimizer, scaler=scaler,
+                      epoch=epoch, step=last_step, wandb=wandb, save_dir='../checkpoints')
+        model.train()
+        del state_dict
+    return processed_steps, truncated
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MiniMind Pretraining")
@@ -132,9 +155,12 @@ if __name__ == "__main__":
     parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb")
     parser.add_argument("--metrics_path", type=str, default=None, help="可选的紧凑训练指标JSON路径")
+    parser.add_argument("--max_steps", type=int, default=None, help="可选的截断训练步数")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-Pretrain", help="wandb项目名")
     parser.add_argument("--use_compile", default=0, type=int, choices=[0, 1], help="是否使用torch.compile加速（0=否，1=是）")
     args = parser.parse_args()
+    if args.max_steps is not None and args.max_steps <= 0:
+        parser.error("--max_steps must be positive")
     # ========== 1. 初始化环境和随机种子 ==========
     local_rank = init_distributed_mode()
     if dist.is_initialized(): args.device = f"cuda:{local_rank}"
@@ -191,9 +217,14 @@ if __name__ == "__main__":
         Logger('torch.compile enabled')
     if dist.is_initialized():
         model = DistributedDataParallel(model, device_ids=[local_rank])
+    if metrics:
+        parameter_probe = capture_parameter_probe(model)
     
     # ========== 8. 开始训练 ==========
+    remaining_steps = args.max_steps
     for epoch in range(start_epoch, args.epochs):
+        if remaining_steps is not None and remaining_steps <= 0:
+            break
         train_sampler and train_sampler.set_epoch(epoch)
         setup_seed(args.seed + epoch); indices = torch.randperm(len(train_ds)).tolist()
         skip = start_step if (epoch == start_epoch and start_step > 0) else 0
@@ -202,17 +233,34 @@ if __name__ == "__main__":
         try:
             if skip > 0:
                 Logger(f'Epoch [{epoch + 1}/{args.epochs}]: 跳过前{start_step}个step，从step {start_step + 1}开始')
-                train_epoch(epoch, loader, len(loader) + skip, start_step, wandb)
+                processed_steps, truncated = train_epoch(
+                    epoch, loader, len(loader) + skip, start_step, wandb, remaining_steps
+                )
             else:
-                train_epoch(epoch, loader, len(loader), 0, wandb)
+                processed_steps, truncated = train_epoch(
+                    epoch, loader, len(loader), 0, wandb, remaining_steps
+                )
+            if remaining_steps is not None:
+                remaining_steps -= processed_steps
+                if truncated:
+                    break
         except Exception:
             if metrics and is_main_process():
-                metrics.finish(extra={"training_failed": True})
+                metrics.finish(extra={
+                    "training_failed": True,
+                    "parameter_update_probe": summarize_parameter_probe(
+                        parameter_probe, capture_parameter_probe(model)
+                    ),
+                })
             raise
 
     if metrics and is_main_process():
         metrics.stop()
-        metrics.finish()
+        metrics.finish(extra={
+            "parameter_update_probe": summarize_parameter_probe(
+                parameter_probe, capture_parameter_probe(model)
+            ),
+        })
     
     # ========== 9. 清理分布进程 ==========
     if dist.is_initialized():

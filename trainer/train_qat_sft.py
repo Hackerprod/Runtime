@@ -61,12 +61,17 @@ def _clip_gradients(model, max_norm):
         metrics.record_gradient_norm(grad_norm)
 
 
-def _train_epoch(epoch, loader, iters, model, optimizer, scaler, autocast_ctx, args):
+def _train_epoch(epoch, loader, iters, model, optimizer, scaler, autocast_ctx, args, max_steps=None):
     if metrics:
-        metrics.start(args.epochs * iters)
+        planned_steps = args.epochs * iters
+        metrics.start(min(planned_steps, max_steps) if max_steps is not None else planned_steps)
     start_time = time.time()
     last_step = 0
+    processed_steps = 0
     for step, (input_ids, labels) in enumerate(loader, start=1):
+        if max_steps is not None and processed_steps >= max_steps:
+            break
+        processed_steps += 1
         input_ids = input_ids.to(args.device)
         labels = labels.to(args.device)
         last_step = step
@@ -119,6 +124,8 @@ def _train_epoch(epoch, loader, iters, model, optimizer, scaler, autocast_ctx, a
         if metrics:
             metrics.record_optimizer_step()
         optimizer.zero_grad(set_to_none=True)
+    truncated = max_steps is not None and processed_steps >= max_steps
+    return processed_steps, truncated
 
 
 def _qat_weight_keys(model):
@@ -166,9 +173,12 @@ def main():
     parser.add_argument('--holdout_size', type=int, default=128)
     parser.add_argument('--data_path', type=str, default='../dataset/sft_t2t_mini.jsonl')
     parser.add_argument('--metrics_path', type=str, default=None)
+    parser.add_argument('--max_steps', type=int, default=None)
     parser.add_argument('--expected_plan_sha256', type=str, default=None)
     parser.add_argument('--expected_holdout_sha256', type=str, default=None)
     args = parser.parse_args()
+    if args.max_steps is not None and args.max_steps <= 0:
+        parser.error('--max_steps must be positive')
 
     if args.metrics_path:
         metrics = MetricsCollector(
@@ -247,7 +257,10 @@ def main():
     train_source_count = 0
     train_padded_count = 0
     train_processed_count = 0
+    remaining_steps = args.max_steps
     for epoch in range(args.epochs):
+        if remaining_steps is not None and remaining_steps <= 0:
+            break
         setup_seed(args.seed + epoch)
         loader = build_deterministic_sft_loader(
             train_ds,
@@ -261,7 +274,13 @@ def main():
         train_padded_count += loader.sft_num_padded_samples
         train_processed_count += loader.sft_num_processed_samples
         try:
-            _train_epoch(epoch, loader, len(loader), model, optimizer, scaler, autocast_ctx, args)
+            processed_steps, truncated = _train_epoch(
+                epoch, loader, len(loader), model, optimizer, scaler, autocast_ctx, args, remaining_steps
+            )
+            if remaining_steps is not None:
+                remaining_steps -= processed_steps
+                if truncated:
+                    break
         except Exception:
             if metrics:
                 metrics.finish(extra={'training_failed': True})

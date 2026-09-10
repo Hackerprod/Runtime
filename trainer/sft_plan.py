@@ -67,6 +67,14 @@ def _dataset_identity(plan_path: str, dataset_bytes: int, dataset_sha256: str) -
     }
 
 
+def build_dataset_identity(data_path: str | os.PathLike[str]) -> dict[str, Any]:
+    """Return portable dataset identity; path itself is intentionally omitted."""
+
+    resolved_path = str(Path(data_path).resolve())
+    dataset_bytes, dataset_sha256 = _sha256_file(resolved_path)
+    return _dataset_identity(resolved_path, dataset_bytes, dataset_sha256)
+
+
 @dataclass(frozen=True)
 class SFTIndexPlan:
     dataset_path: str
@@ -250,4 +258,9 @@ def build_deterministic_sft_loader(
     return loader
 
 
-__all__ = ["SFTIndexPlan", "build_deterministic_sft_loader", "build_sft_index_plan"]
+__all__ = [
+    "SFTIndexPlan",
+    "build_dataset_identity",
+    "build_deterministic_sft_loader",
+    "build_sft_index_plan",
+]

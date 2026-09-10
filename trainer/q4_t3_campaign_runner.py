@@ -836,7 +836,11 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         if stage in {"control", "qat"}:
             validate_stage_binding(execution.stdout, plan_binding)
         metric_path = paths[f"{stage}_metrics"]
-        metrics = validate_stage_metrics(metric_path, stage, require_loss_decrease=args.smoke)
+        metrics = validate_stage_metrics(
+            metric_path,
+            stage=stage,
+            require_loss_decrease=args.smoke,
+        )
         variant = {"pretrain": "parent", "control": "control", "qat": "qat"}[stage]
         checkpoint = (
             paths["parent_path"] if stage == "pretrain"

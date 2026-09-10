@@ -1,6 +1,7 @@
 import json
 import io
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -375,6 +376,50 @@ def test_preflight_failure_does_not_launch_subprocess(tmp_path, monkeypatch):
     monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: pytest.fail("subprocess launched"))
     with pytest.raises(CampaignError, match="CUDA is unavailable"):
         run_campaign(args)
+
+
+def test_campaign_execute_calls_keyword_only_stage_validator(tmp_path, monkeypatch):
+    args = _args("--smoke", "--run-pretrain")
+    plan_binding = {"plan_sha256": "a" * 64, "holdout_sha256": "b" * 64}
+    calls = []
+
+    def fake_preflight(_args):
+        return {"args": _args, "repo_root": tmp_path, "plan": plan_binding}
+
+    def fake_run_stage_live(command, *, cwd, log_path):
+        return runner.StageExecution(
+            args=tuple(command),
+            returncode=0,
+            stdout=(
+                "index plan SHA-256: " + plan_binding["plan_sha256"] + "\n"
+                "holdout SHA-256: " + plan_binding["holdout_sha256"] + "\n"
+            ),
+            sanitized_command=tuple(runner.sanitize_command(command)),
+        )
+
+    def fake_validate_stage_metrics(metrics_path, *, stage, require_loss_decrease):
+        calls.append((Path(metrics_path), stage, require_loss_decrease))
+        return _valid_stage_metrics(stage)
+
+    monkeypatch.setattr(runner, "preflight", fake_preflight)
+    monkeypatch.setattr(runner, "run_stage_live", fake_run_stage_live)
+    monkeypatch.setattr(runner, "validate_stage_metrics", fake_validate_stage_metrics)
+    monkeypatch.setattr(runner, "reload_checkpoint", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_checkpoint_binding",
+        lambda *args, **kwargs: {"sha256": "p" * 64, "dtype": "float16"},
+    )
+    monkeypatch.setattr(runner, "_write_manifest", lambda *args, **kwargs: None)
+
+    result = run_campaign(args)
+
+    assert result["smoke_success"] is True
+    assert [(stage, smoke) for _, stage, smoke in calls] == [
+        ("pretrain", True),
+        ("control", True),
+        ("qat", True),
+    ]
 
 
 def test_missing_parent_fails_closed_before_branch_execution(tmp_path, monkeypatch):

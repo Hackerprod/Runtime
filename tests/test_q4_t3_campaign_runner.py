@@ -314,7 +314,7 @@ def test_full_approval_requires_matching_successful_smoke_manifest(tmp_path):
             }
             for stage in ("pretrain", "control", "qat")
         ],
-        
+
         comparisons={},
         smoke_success=True,
     )), encoding="utf-8")
